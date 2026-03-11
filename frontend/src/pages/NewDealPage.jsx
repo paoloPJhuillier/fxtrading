@@ -11,13 +11,16 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Command, CommandInput, CommandList, CommandEmpty, CommandGroup, CommandItem } from '@/components/ui/command';
 import { Calendar } from '@/components/ui/calendar';
-import { CalendarIcon, ArrowLeft, ChevronsUpDown, Check } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Separator } from '@/components/ui/separator';
+import { CalendarIcon, ArrowLeft, ChevronsUpDown, Check, AlertTriangle } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 
 export default function NewDealPage() {
   const navigate = useNavigate();
   const [submitting, setSubmitting] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const [ref, setRef] = useState({ companies: [], banks: [], txTypes: [], tfTypes: [], currencies: [] });
   const [f, setF] = useState({
     transaction_type: '', transfer_type: '',
@@ -56,12 +59,16 @@ export default function NewDealPage() {
     });
   };
 
-  const submit = async (e) => {
+  const handlePreSubmit = (e) => {
     e.preventDefault();
     if (!f.transaction_type || !f.transfer_type || !f.buy_currency || !f.sell_currency || !f.from_company || !f.to_company) {
       toast.error('Please fill in all required fields');
       return;
     }
+    setConfirmOpen(true);
+  };
+
+  const submit = async () => {
     setSubmitting(true);
     try {
       await api.post('/deals', {
@@ -76,7 +83,7 @@ export default function NewDealPage() {
       navigate('/deals');
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Failed to create deal');
-    } finally { setSubmitting(false); }
+    } finally { setSubmitting(false); setConfirmOpen(false); }
   };
 
   const fiat = ref.currencies.filter(c => c.type === 'fiat');
@@ -95,7 +102,7 @@ export default function NewDealPage() {
         </div>
       </div>
 
-      <form onSubmit={submit}>
+      <form onSubmit={handlePreSubmit}>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <Card>
             <CardHeader><CardTitle className="text-base text-[#08263e]" style={{ fontFamily: 'Chivo' }}>Deal Information</CardTitle></CardHeader>
@@ -150,18 +157,8 @@ export default function NewDealPage() {
           <Card>
             <CardHeader><CardTitle className="text-base text-[#08263e]" style={{ fontFamily: 'Chivo' }}>Source (From)</CardTitle></CardHeader>
             <CardContent className="space-y-4">
-              <Field label="Company">
-                <Select value={f.from_company} onValueChange={v => up('from_company', v)}>
-                  <SelectTrigger data-testid="from-company-select"><SelectValue placeholder="Select company..." /></SelectTrigger>
-                  <SelectContent>{ref.companies.map(c => <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>)}</SelectContent>
-                </Select>
-              </Field>
-              <Field label="Bank">
-                <Select value={f.from_bank} onValueChange={v => up('from_bank', v)}>
-                  <SelectTrigger data-testid="from-bank-select"><SelectValue placeholder="Select bank..." /></SelectTrigger>
-                  <SelectContent>{ref.banks.map(b => <SelectItem key={b.id} value={b.name}>{b.name}</SelectItem>)}</SelectContent>
-                </Select>
-              </Field>
+              <SearchSelect label="Company" value={f.from_company} onChange={v => up('from_company', v)} items={ref.companies} displayKey="name" tid="from-company" placeholder="Search company..." />
+              <SearchSelect label="Bank" value={f.from_bank} onChange={v => up('from_bank', v)} items={ref.banks} displayKey="name" tid="from-bank" placeholder="Search bank..." />
               <Field label="Account Number">
                 <Input value={f.from_account_num} onChange={e => up('from_account_num', e.target.value)} placeholder="Enter account number" data-testid="from-account-input" />
               </Field>
@@ -171,18 +168,8 @@ export default function NewDealPage() {
           <Card>
             <CardHeader><CardTitle className="text-base text-[#08263e]" style={{ fontFamily: 'Chivo' }}>Destination (To)</CardTitle></CardHeader>
             <CardContent className="space-y-4">
-              <Field label="Company">
-                <Select value={f.to_company} onValueChange={v => up('to_company', v)}>
-                  <SelectTrigger data-testid="to-company-select"><SelectValue placeholder="Select company..." /></SelectTrigger>
-                  <SelectContent>{ref.companies.map(c => <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>)}</SelectContent>
-                </Select>
-              </Field>
-              <Field label="Bank">
-                <Select value={f.to_bank} onValueChange={v => up('to_bank', v)}>
-                  <SelectTrigger data-testid="to-bank-select"><SelectValue placeholder="Select bank..." /></SelectTrigger>
-                  <SelectContent>{ref.banks.map(b => <SelectItem key={b.id} value={b.name}>{b.name}</SelectItem>)}</SelectContent>
-                </Select>
-              </Field>
+              <SearchSelect label="Company" value={f.to_company} onChange={v => up('to_company', v)} items={ref.companies} displayKey="name" tid="to-company" placeholder="Search company..." />
+              <SearchSelect label="Bank" value={f.to_bank} onChange={v => up('to_bank', v)} items={ref.banks} displayKey="name" tid="to-bank" placeholder="Search bank..." />
               <Field label="Account Number">
                 <Input value={f.to_account_num} onChange={e => up('to_account_num', e.target.value)} placeholder="Enter account number" data-testid="to-account-input" />
               </Field>
@@ -205,6 +192,55 @@ export default function NewDealPage() {
           </Button>
         </div>
       </form>
+
+      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto" data-testid="confirm-deal-dialog">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-[#08263e]" style={{ fontFamily: 'Chivo' }}>
+              <AlertTriangle className="h-5 w-5 text-[#f59e0b]" /> Confirm Deal Submission
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-slate-500">Please review the deal details below before submitting.</p>
+          <Separator />
+          <div className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
+            <ConfirmRow label="Transaction Type" val={f.transaction_type} />
+            <ConfirmRow label="Transfer Type" val={f.transfer_type} />
+            <ConfirmRow label="Deal Date" val={f.deal_date ? format(f.deal_date, 'dd MMM yyyy') : ''} />
+            <ConfirmRow label="Value Date" val={f.value_date ? format(f.value_date, 'dd MMM yyyy') : ''} />
+            <ConfirmRow label="Buy Currency" val={f.buy_currency} />
+            <ConfirmRow label="Sell Currency" val={f.sell_currency} />
+            <ConfirmRow label={`Currency Amount (${f.buy_currency || '-'})`} val={f.currency_amount ? Number(f.currency_amount).toLocaleString() : '-'} mono />
+            <ConfirmRow label="Exchange Rate" val={f.rate || '-'} mono />
+            <ConfirmRow label={`Converted Amount (${f.sell_currency || '-'})`} val={f.amount ? Number(f.amount).toLocaleString() : '-'} mono />
+            <ConfirmRow label="From Company" val={f.from_company} />
+            <ConfirmRow label="From Bank" val={f.from_bank} />
+            <ConfirmRow label="From Account" val={f.from_account_num || '-'} mono />
+            <ConfirmRow label="To Company" val={f.to_company} />
+            <ConfirmRow label="To Bank" val={f.to_bank} />
+            <ConfirmRow label="To Account" val={f.to_account_num || '-'} mono />
+          </div>
+          {f.remarks && (
+            <>
+              <Separator />
+              <div>
+                <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Remarks</p>
+                <p className="text-sm">{f.remarks}</p>
+              </div>
+            </>
+          )}
+          {f.buy_currency && f.sell_currency && f.currency_amount && f.rate && (
+            <div className="bg-slate-50 p-3 rounded-md text-center font-mono text-sm font-medium text-[#08263e]">
+              {Number(f.currency_amount).toLocaleString()} {f.buy_currency} x {f.rate} = {Number(f.amount).toLocaleString()} {f.sell_currency}
+            </div>
+          )}
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setConfirmOpen(false)} data-testid="confirm-cancel-btn">Go Back & Edit</Button>
+            <Button className="bg-[#08263e] hover:bg-[#08263e]/90" onClick={submit} disabled={submitting} data-testid="confirm-submit-btn">
+              {submitting ? 'Submitting...' : 'Confirm & Submit'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -291,5 +327,50 @@ function CurrSel({ label, value, onChange, fiat, stablecoin, crypto, tid }) {
         </PopoverContent>
       </Popover>
     </Field>
+  );
+}
+
+function SearchSelect({ label, value, onChange, items, displayKey, tid, placeholder }) {
+  const [open, setOpen] = useState(false);
+  const selected = items.find(i => i[displayKey] === value);
+  return (
+    <Field label={label}>
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <Button variant="outline" role="combobox" aria-expanded={open}
+            className="w-full justify-between text-left font-normal h-9 text-sm"
+            data-testid={`${tid}-select`}>
+            <span className="truncate">{selected ? selected[displayKey] : placeholder}</span>
+            <ChevronsUpDown className="ml-1 h-3.5 w-3.5 shrink-0 text-slate-400" />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-[280px] p-0" align="start">
+          <Command>
+            <CommandInput placeholder={placeholder} data-testid={`${tid}-search`} />
+            <CommandList>
+              <CommandEmpty>No results found.</CommandEmpty>
+              <CommandGroup>
+                {items.map(item => (
+                  <CommandItem key={item.id} value={item[displayKey]} onSelect={() => { onChange(item[displayKey]); setOpen(false); }}>
+                    <Check className={cn("mr-2 h-3 w-3", value === item[displayKey] ? "opacity-100" : "opacity-0")} />
+                    <span className="text-sm">{item[displayKey]}</span>
+                    {item.code && <span className="ml-auto text-xs text-slate-400 font-mono">{item.code}</span>}
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            </CommandList>
+          </Command>
+        </PopoverContent>
+      </Popover>
+    </Field>
+  );
+}
+
+function ConfirmRow({ label, val, mono }) {
+  return (
+    <div>
+      <p className="text-[10px] text-slate-400 uppercase tracking-wider">{label}</p>
+      <p className={`text-sm font-medium ${mono ? 'font-mono' : ''}`}>{val || '-'}</p>
+    </div>
   );
 }

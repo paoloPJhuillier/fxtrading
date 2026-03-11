@@ -6,7 +6,9 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Plus, FileText } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Separator } from '@/components/ui/separator';
+import { Plus, FileText, Eye } from 'lucide-react';
 import { format } from 'date-fns';
 
 const STATUS_MAP = {
@@ -19,6 +21,7 @@ export default function DealsPage() {
   const [deals, setDeals] = useState([]);
   const [filter, setFilter] = useState('all');
   const [loading, setLoading] = useState(true);
+  const [sel, setSel] = useState(null);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -84,6 +87,7 @@ export default function DealsPage() {
                   <TableHead>Deal Date</TableHead>
                   <TableHead>Value Date</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead>Action</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -97,6 +101,11 @@ export default function DealsPage() {
                     <TableCell className="text-xs">{format(new Date(deal.deal_date + 'T00:00:00'), 'dd MMM yyyy')}</TableCell>
                     <TableCell className="text-xs">{format(new Date(deal.value_date + 'T00:00:00'), 'dd MMM yyyy')}</TableCell>
                     <TableCell><Badge className={STATUS_MAP[deal.status]}>{deal.status}</Badge></TableCell>
+                    <TableCell>
+                      <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => setSel(deal)} data-testid={`view-deal-${deal.id}`}>
+                        <Eye className="h-3.5 w-3.5" />
+                      </Button>
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -104,6 +113,61 @@ export default function DealsPage() {
           )}
         </CardContent>
       </Card>
+
+      <Dialog open={!!sel} onOpenChange={o => !o && setSel(null)}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" data-testid="deal-detail-dialog">
+          <DialogHeader>
+            <DialogTitle className="text-[#08263e]" style={{ fontFamily: 'Chivo' }}>Deal Details - {sel?.reference_number}</DialogTitle>
+          </DialogHeader>
+          {sel && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
+                <DInfo label="Transaction Type" val={sel.transaction_type} />
+                <DInfo label="Transfer Type" val={sel.transfer_type} />
+                <DInfo label="Deal Date" val={format(new Date(sel.deal_date + 'T00:00:00'), 'dd MMM yyyy')} />
+                <DInfo label="Value Date" val={format(new Date(sel.value_date + 'T00:00:00'), 'dd MMM yyyy')} />
+                <DInfo label="Buy Currency" val={sel.buy_currency} />
+                <DInfo label="Sell Currency" val={sel.sell_currency} />
+                <DInfo label={`Currency Amount (${sel.buy_currency})`} val={Number(sel.currency_amount).toLocaleString()} mono />
+                <DInfo label="Exchange Rate" val={sel.rate} mono />
+                <DInfo label={`Converted Amount (${sel.sell_currency})`} val={Number(sel.amount).toLocaleString()} mono />
+                <DInfo label="From" val={`${sel.from_company} / ${sel.from_bank} (${sel.from_account_num})`} />
+                <DInfo label="To" val={`${sel.to_company} / ${sel.to_bank} (${sel.to_account_num})`} />
+                <DInfo label="Status" val={sel.status} />
+                {sel.processed_by_name && <DInfo label="Processed By" val={sel.processed_by_name} />}
+                {sel.processed_at && <DInfo label="Processed At" val={format(new Date(sel.processed_at), 'dd MMM yyyy HH:mm')} />}
+              </div>
+              {sel.remarks && (
+                <>
+                  <Separator />
+                  <div className="bg-slate-50 p-3 rounded-md">
+                    <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Remarks</p>
+                    <p className="text-sm">{sel.remarks}</p>
+                  </div>
+                </>
+              )}
+              {sel.treasury_remarks && (
+                <div className="bg-blue-50 p-3 rounded-md">
+                  <p className="text-[10px] text-blue-400 uppercase tracking-wider mb-1">Treasury Remarks</p>
+                  <p className="text-sm">{sel.treasury_remarks}</p>
+                </div>
+              )}
+              <div className="bg-slate-50 p-3 rounded-md text-center font-mono text-sm font-medium text-[#08263e]">
+                {Number(sel.currency_amount).toLocaleString()} {sel.buy_currency} x {sel.rate} = {Number(sel.amount).toLocaleString()} {sel.sell_currency}
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+function DInfo({ label, val, mono }) {
+  return (
+    <div>
+      <p className="text-[10px] text-slate-400 uppercase tracking-wider">{label}</p>
+      <p className={`text-sm font-medium ${mono ? 'font-mono' : ''}`}>{val}</p>
     </div>
   );
 }
