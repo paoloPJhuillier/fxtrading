@@ -185,7 +185,7 @@ export default function NewDealPage() {
           </CardContent>
         </Card>
 
-        <div className="flex justify-end gap-3 mt-6">
+        <div className="flex justify-end gap-3 mt-6 mb-16">
           <Button type="button" variant="outline" onClick={() => navigate('/deals')} data-testid="cancel-btn">Cancel</Button>
           <Button type="submit" className="bg-[#08263e] hover:bg-[#08263e]/90" disabled={submitting} data-testid="submit-deal-btn">
             {submitting ? 'Creating...' : 'Submit Deal Ticket'}

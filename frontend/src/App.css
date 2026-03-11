@@ -32,3 +32,8 @@
 .tabular-nums {
     font-variant-numeric: tabular-nums;
 }
+
+/* Push Emergent badge behind dialogs */
+#emergent-badge {
+    z-index: 40 !important;
+}
