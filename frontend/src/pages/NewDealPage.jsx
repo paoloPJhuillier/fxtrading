@@ -129,16 +129,21 @@ export default function NewDealPage() {
                 <CurrSel label="Sell Currency" value={f.sell_currency} onChange={v => up('sell_currency', v)} fiat={fiat} stablecoin={stablecoin} crypto={crypto} tid="sell-currency" />
               </div>
               <div className="grid grid-cols-3 gap-4">
-                <Field label="Currency Amount">
+                <Field label={`Currency Amount${f.buy_currency ? ` (${f.buy_currency})` : ''}`}>
                   <Input type="number" step="0.01" value={f.currency_amount} onChange={e => up('currency_amount', e.target.value)} placeholder="0.00" data-testid="currency-amount-input" />
                 </Field>
-                <Field label="Rate">
+                <Field label="Exchange Rate">
                   <Input type="number" step="0.000001" value={f.rate} onChange={e => up('rate', e.target.value)} placeholder="0.000000" data-testid="rate-input" />
                 </Field>
-                <Field label="Amount (auto-computed)">
+                <Field label={`Converted Amount${f.sell_currency ? ` (${f.sell_currency})` : ''}`}>
                   <Input type="number" step="0.01" value={f.amount} readOnly className="bg-slate-50 font-medium" placeholder="0.00" data-testid="amount-input" />
                 </Field>
               </div>
+              {f.buy_currency && f.sell_currency && f.currency_amount && f.rate && (
+                <p className="text-xs text-slate-400 font-mono" data-testid="rate-summary">
+                  {Number(f.currency_amount).toLocaleString()} {f.buy_currency} × {f.rate} = {Number(f.amount).toLocaleString()} {f.sell_currency}
+                </p>
+              )}
             </CardContent>
           </Card>
 
