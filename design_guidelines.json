@@ -1,0 +1,148 @@
+{
+  "design_system": {
+    "identity": {
+      "name": "FX Trader Pro",
+      "archetype": "The Performance Pro",
+      "tone": "Precision, Authority, Speed, Clarity",
+      "theme_mode": "light",
+      "visual_style": "Swiss High-Contrast"
+    },
+    "typography": {
+      "font_family": {
+        "headings": "Chivo, sans-serif",
+        "body": "Inter, sans-serif",
+        "mono": "JetBrains Mono, monospace"
+      },
+      "import_url": "https://fonts.googleapis.com/css2?family=Chivo:wght@300;400;700;900&family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap",
+      "scale": {
+        "h1": "text-4xl font-bold tracking-tight text-[#08263e]",
+        "h2": "text-3xl font-bold tracking-tight text-[#08263e]",
+        "h3": "text-2xl font-semibold tracking-tight text-[#08263e]",
+        "body": "text-sm text-slate-600 leading-relaxed",
+        "label": "text-xs font-medium uppercase tracking-wider text-slate-500",
+        "data": "font-mono text-sm font-medium"
+      }
+    },
+    "colors": {
+      "palette": {
+        "primary": {
+          "DEFAULT": "#08263e",
+          "foreground": "#ffffff",
+          "50": "#f0f4f8",
+          "100": "#d9e2ec",
+          "500": "#518dca",
+          "900": "#08263e"
+        },
+        "secondary": {
+          "DEFAULT": "#f1f2f2",
+          "foreground": "#08263e"
+        },
+        "accent": {
+          "DEFAULT": "#518dca",
+          "foreground": "#ffffff"
+        },
+        "destructive": {
+          "DEFAULT": "#ec474e",
+          "foreground": "#ffffff"
+        },
+        "success": {
+          "DEFAULT": "#10b981",
+          "foreground": "#ffffff"
+        },
+        "background": "#f8fafc",
+        "surface": "#ffffff",
+        "border": "#e2e8f0"
+      },
+      "usage": {
+        "sidebar_bg": "#08263e",
+        "sidebar_text": "#ffffff",
+        "sidebar_active": "#518dca",
+        "header_bg": "#ffffff",
+        "card_bg": "#ffffff",
+        "buy_action": "#518dca",
+        "sell_action": "#ec474e"
+      }
+    },
+    "layout": {
+      "spacing_scale": "generous",
+      "container_padding": "p-6 md:p-8 lg:p-12",
+      "grid_gap": "gap-6",
+      "radius": {
+        "default": "rounded-md",
+        "button": "rounded-md",
+        "card": "rounded-lg"
+      },
+      "dashboard_structure": {
+        "type": "sidebar-fixed",
+        "sidebar_width": "w-64",
+        "header_height": "h-16"
+      }
+    },
+    "components": {
+      "buttons": {
+        "primary": "bg-[#08263e] hover:bg-[#08263e]/90 text-white shadow-sm font-medium",
+        "secondary": "bg-white border border-slate-200 hover:bg-slate-50 text-[#08263e] shadow-sm",
+        "destructive": "bg-[#ec474e] hover:bg-[#ec474e]/90 text-white shadow-sm",
+        "ghost": "hover:bg-slate-100 text-slate-600"
+      },
+      "cards": {
+        "base": "bg-white border border-slate-200 shadow-sm rounded-lg overflow-hidden",
+        "hover": "hover:shadow-md transition-shadow duration-200"
+      },
+      "inputs": {
+        "base": "border-slate-300 focus:border-[#518dca] focus:ring-1 focus:ring-[#518dca] rounded-md h-10"
+      },
+      "status_badges": {
+        "base": "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium",
+        "success": "bg-green-100 text-green-800",
+        "warning": "bg-yellow-100 text-yellow-800",
+        "error": "bg-red-100 text-red-800",
+        "info": "bg-blue-100 text-blue-800"
+      }
+    },
+    "visual_enhancers": {
+      "shadows": "shadow-sm",
+      "borders": "border border-slate-200",
+      "glassmorphism": "backdrop-blur-md bg-white/80 border-b border-slate-200/50",
+      "micro_interactions": "active:scale-[0.98] transition-all duration-150"
+    },
+    "charts": {
+      "colors": ["#08263e", "#518dca", "#ec474e", "#10b981", "#f59e0b"],
+      "style": "clean",
+      "grid": "stroke-slate-100"
+    }
+  },
+  "assets": {
+    "images": {
+      "login_bg": {
+        "url": "https://images.unsplash.com/photo-1768101225267-c6fc5678c113?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1NzR8MHwxfHNlYXJjaHwxfHxtb2Rlcm4lMjBjb3Jwb3JhdGUlMjBhcmNoaXRlY3R1cmUlMjBmaW5hbmNlJTIwYWJzdHJhY3R8ZW58MHx8fHwxNzczMTk4ODI0fDA&ixlib=rb-4.1.0&q=85",
+        "alt": "Modern Corporate Skyscraper"
+      },
+      "dashboard_hero": {
+        "url": "https://images.unsplash.com/photo-1528810289438-283f885c31ef?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1NzR8MHwxfHNlYXJjaHwzfHxtb2Rlcm4lMjBjb3Jwb3JhdGUlMjBhcmNoaXRlY3R1cmUlMjBmaW5hbmNlJTIwYWJzdHJhY3R8ZW58MHx8fHwxNzczMTk4ODI0fDA&ixlib=rb-4.1.0&q=85",
+        "alt": "Glass Building Detail"
+      }
+    },
+    "icons": "lucide-react"
+  },
+  "instructions_to_main_agent": [
+    "INSTALL FONTS: Add the Google Fonts link to public/index.html immediately.",
+    "THEME SETUP: Configure tailwind.config.js to use the specific hex codes provided in 'colors.palette'. Map 'primary' to #08263e, 'destructive' to #ec474e.",
+    "LAYOUT: Build a responsive Sidebar layout. On mobile, it becomes a Sheet/Drawer.",
+    "DENSITY: Use 'Bento' grids for the dashboard. Metric cards should be compact but have generous internal padding (p-6).",
+    "TABLES: This is a data-heavy app. Use dense tables with sticky headers. Use JetBrains Mono for all numerical data (amounts, rates).",
+    "DEAL TICKET: The 'New Deal' form is the core feature. Split it into logical sections (Deal Info, Amounts, Settlement). Do not make it one giant list of inputs.",
+    "ROLES: Ensure the UI clearly distinguishes between 'Trader' (Action-oriented) and 'Treasury' (Review-oriented).",
+    "TESTIDS: Add data-testid to every interactive element (buttons, inputs, rows).",
+    "NO GRADIENTS: Do not use gradients for backgrounds. Use solid colors or very subtle patterns.",
+    "ANTI-AI: Do not center-align everything. Use strong left alignment for text. Use asymmetry in the dashboard grid."
+  ],
+  "universal_guidelines": [
+    "Do not use 'Inter' for headings. Use 'Chivo'.",
+    "Do not use generic gray backgrounds. Use #f8fafc for the app background.",
+    "Interactive elements must have a defined hover state (change color or shadow).",
+    "All currency amounts must be right-aligned in tables.",
+    "Dates should be formatted consistently (e.g., DD MMM YYYY).",
+    "Use 'sonner' for all toast notifications."
+  ]
+}
