@@ -431,9 +431,18 @@ async def seed_data():
             ("CZK", "Czech Koruna", "CZK"), ("HUF", "Hungarian Forint", "Ft"),
             ("RUB", "Russian Ruble", "RUB")
         ]
+        stablecoin = [
+            ("USDT", "Tether", "USDT"), ("USDC", "USD Coin", "USDC"),
+            ("DAI", "Dai", "DAI"), ("BUSD", "Binance USD", "BUSD"),
+            ("TUSD", "TrueUSD", "TUSD"), ("FRAX", "Frax", "FRAX"),
+            ("LUSD", "Liquity USD", "LUSD"), ("GUSD", "Gemini Dollar", "GUSD"),
+            ("USDP", "Pax Dollar", "USDP"), ("PYUSD", "PayPal USD", "PYUSD"),
+            ("FDUSD", "First Digital USD", "FDUSD"), ("USDD", "USDD", "USDD"),
+            ("cUSD", "Celo Dollar", "cUSD"), ("sUSD", "Synthetix USD", "sUSD"),
+            ("EURT", "Tether Euro", "EURT"), ("XSGD", "StraitsX SGD", "XSGD")
+        ]
         crypto = [
             ("BTC", "Bitcoin", "BTC"), ("ETH", "Ethereum", "ETH"),
-            ("USDT", "Tether", "USDT"), ("USDC", "USD Coin", "USDC"),
             ("BNB", "Binance Coin", "BNB"), ("XRP", "Ripple", "XRP"),
             ("ADA", "Cardano", "ADA"), ("SOL", "Solana", "SOL"),
             ("DOGE", "Dogecoin", "DOGE"), ("DOT", "Polkadot", "DOT"),
@@ -446,6 +455,8 @@ async def seed_data():
         currencies = []
         for code, name, symbol in fiat:
             currencies.append({"id": str(uuid.uuid4()), "code": code, "name": name, "type": "fiat", "symbol": symbol, "is_active": True, "created_at": datetime.now(timezone.utc).isoformat()})
+        for code, name, symbol in stablecoin:
+            currencies.append({"id": str(uuid.uuid4()), "code": code, "name": name, "type": "stablecoin", "symbol": symbol, "is_active": True, "created_at": datetime.now(timezone.utc).isoformat()})
         for code, name, symbol in crypto:
             currencies.append({"id": str(uuid.uuid4()), "code": code, "name": name, "type": "crypto", "symbol": symbol, "is_active": True, "created_at": datetime.now(timezone.utc).isoformat()})
         await db.currencies.insert_many(currencies)

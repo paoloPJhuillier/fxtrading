@@ -111,7 +111,7 @@ export default function ReferenceDataPage() {
                           {isBank && <TableCell className="font-mono text-xs">{item.swift_code || '-'}</TableCell>}
                           {isCurr && (
                             <>
-                              <TableCell><Badge variant={item.type === 'crypto' ? 'secondary' : 'outline'} className="text-xs">{item.type}</Badge></TableCell>
+                              <TableCell><Badge variant={item.type === 'crypto' ? 'secondary' : item.type === 'stablecoin' ? 'outline' : 'outline'} className={`text-xs ${item.type === 'stablecoin' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : ''}`}>{item.type}</Badge></TableCell>
                               <TableCell className="text-sm">{item.symbol}</TableCell>
                             </>
                           )}
@@ -161,6 +161,7 @@ export default function ReferenceDataPage() {
                     <SelectTrigger data-testid="ref-type-select"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="fiat">Fiat</SelectItem>
+                      <SelectItem value="stablecoin">Stablecoin</SelectItem>
                       <SelectItem value="crypto">Crypto</SelectItem>
                     </SelectContent>
                   </Select>

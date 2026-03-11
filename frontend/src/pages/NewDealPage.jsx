@@ -68,6 +68,7 @@ export default function NewDealPage() {
   };
 
   const fiat = ref.currencies.filter(c => c.type === 'fiat');
+  const stablecoin = ref.currencies.filter(c => c.type === 'stablecoin');
   const crypto = ref.currencies.filter(c => c.type === 'crypto');
 
   return (
@@ -112,8 +113,8 @@ export default function NewDealPage() {
             <CardHeader><CardTitle className="text-base text-[#08263e]" style={{ fontFamily: 'Chivo' }}>Amounts & Currency</CardTitle></CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
-                <CurrSel label="Buy Currency" value={f.buy_currency} onChange={v => up('buy_currency', v)} fiat={fiat} crypto={crypto} tid="buy-currency" />
-                <CurrSel label="Sell Currency" value={f.sell_currency} onChange={v => up('sell_currency', v)} fiat={fiat} crypto={crypto} tid="sell-currency" />
+                <CurrSel label="Buy Currency" value={f.buy_currency} onChange={v => up('buy_currency', v)} fiat={fiat} stablecoin={stablecoin} crypto={crypto} tid="buy-currency" />
+                <CurrSel label="Sell Currency" value={f.sell_currency} onChange={v => up('sell_currency', v)} fiat={fiat} stablecoin={stablecoin} crypto={crypto} tid="sell-currency" />
               </div>
               <div className="grid grid-cols-3 gap-4">
                 <Field label="Currency Amount">
@@ -214,7 +215,7 @@ function DatePick({ label, value, onChange, tid }) {
   );
 }
 
-function CurrSel({ label, value, onChange, fiat, crypto, tid }) {
+function CurrSel({ label, value, onChange, fiat, stablecoin, crypto, tid }) {
   return (
     <Field label={label}>
       <Select value={value} onValueChange={onChange}>
@@ -223,6 +224,10 @@ function CurrSel({ label, value, onChange, fiat, crypto, tid }) {
           <SelectGroup>
             <SelectLabel className="text-xs text-slate-400">Fiat Currencies</SelectLabel>
             {fiat.map(c => <SelectItem key={c.id} value={c.code}>{c.code} - {c.name}</SelectItem>)}
+          </SelectGroup>
+          <SelectGroup>
+            <SelectLabel className="text-xs text-slate-400">Stablecoins</SelectLabel>
+            {stablecoin.map(c => <SelectItem key={c.id} value={c.code}>{c.code} - {c.name}</SelectItem>)}
           </SelectGroup>
           <SelectGroup>
             <SelectLabel className="text-xs text-slate-400">Cryptocurrencies</SelectLabel>
