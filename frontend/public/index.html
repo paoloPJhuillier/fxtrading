@@ -43,25 +43,16 @@
             target="_blank"
             href="https://app.emergent.sh/?utm_source=emergent-badge"
             style="
-                display: inline-flex !important;
-                box-sizing: border-box;
-                width: 178px;
-                height: 40px;
-                padding: 8px 12px 8px 12px;
-                align-items: center !important;
-                gap: 8px;
-                border-radius: 50px !important;
-                background: #000 !important;
+                display: none !important;
+                visibility: hidden !important;
+                opacity: 0 !important;
+                pointer-events: none !important;
+                width: 0 !important;
+                height: 0 !important;
+                overflow: hidden !important;
                 position: fixed !important;
-                bottom: 16px;
-                right: 16px;
-                text-decoration: none;
-                font-family: -apple-system, BlinkMacSystemFont,
-                    &quot;Segoe UI&quot;, Roboto, Oxygen, Ubuntu, Cantarell,
-                    &quot;Open Sans&quot;, &quot;Helvetica Neue&quot;,
-                    sans-serif !important;
-                font-size: 12px !important;
-                z-index: 9999 !important;
+                bottom: -9999px;
+                right: -9999px;
             "
         >
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none">
@@ -153,6 +144,41 @@
                     capturePerformance: false,
                 },
             });
+        </script>
+        <script>
+            (function hideBadge() {
+                var badge = document.getElementById('emergent-badge');
+                if (badge) {
+                    badge.style.setProperty('display', 'none', 'important');
+                    badge.style.setProperty('visibility', 'hidden', 'important');
+                    badge.style.setProperty('opacity', '0', 'important');
+                    badge.style.setProperty('pointer-events', 'none', 'important');
+                    badge.style.setProperty('width', '0', 'important');
+                    badge.style.setProperty('height', '0', 'important');
+                    badge.style.setProperty('overflow', 'hidden', 'important');
+                    badge.style.setProperty('position', 'absolute', 'important');
+                    badge.style.setProperty('left', '-9999px', 'important');
+                }
+                var observer = new MutationObserver(function(mutations) {
+                    var b = document.getElementById('emergent-badge');
+                    if (b && b.style.display !== 'none') {
+                        b.style.setProperty('display', 'none', 'important');
+                        b.style.setProperty('visibility', 'hidden', 'important');
+                        b.style.setProperty('opacity', '0', 'important');
+                        b.style.setProperty('pointer-events', 'none', 'important');
+                        b.style.setProperty('width', '0', 'important');
+                        b.style.setProperty('height', '0', 'important');
+                        b.style.setProperty('overflow', 'hidden', 'important');
+                        b.style.setProperty('position', 'absolute', 'important');
+                        b.style.setProperty('left', '-9999px', 'important');
+                    }
+                });
+                observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['style'] });
+                window.addEventListener('load', hideBadge);
+                setTimeout(hideBadge, 500);
+                setTimeout(hideBadge, 1500);
+                setTimeout(hideBadge, 3000);
+            })();
         </script>
     </body>
 </html>
