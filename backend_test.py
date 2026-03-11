@@ -8,7 +8,7 @@ from typing import Dict, Any, List
 
 class FXTradingAPITester:
     def __init__(self):
-        self.base_url = "https://forex-ticket-hub.preview.emergentagent.com/api"
+        self.base_url = "https://fx-portal.preview.emergentagent.com/api"
         self.tokens = {}  # Store tokens for different users
         self.users = [
             {"email": "admin@fxtracker.com", "password": "Admin@123", "role": "admin"},

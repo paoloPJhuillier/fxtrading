@@ -1,5 +1,6 @@
-from fastapi import FastAPI, APIRouter, Depends, HTTPException, Query
+from fastapi import FastAPI, APIRouter, Depends, HTTPException, Query, UploadFile, File
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.responses import Response
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -7,6 +8,7 @@ from pymongo import ReturnDocument
 import os
 import logging
 import uuid
+import requests as http_requests
 from pathlib import Path
 from pydantic import BaseModel
 from typing import List, Optional
@@ -34,6 +36,40 @@ api_router = APIRouter(prefix="/api")
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
+# --- Object Storage ---
+STORAGE_URL = "https://integrations.emergentagent.com/objstore/api/v1/storage"
+EMERGENT_KEY = os.environ.get("EMERGENT_LLM_KEY")
+APP_NAME = "fx-trading-tracker"
+storage_key = None
+
+def init_storage():
+    global storage_key
+    if storage_key:
+        return storage_key
+    resp = http_requests.post(f"{STORAGE_URL}/init", json={"emergent_key": EMERGENT_KEY}, timeout=30)
+    resp.raise_for_status()
+    storage_key = resp.json()["storage_key"]
+    return storage_key
+
+def put_object(path: str, data: bytes, content_type: str) -> dict:
+    key = init_storage()
+    resp = http_requests.put(
+        f"{STORAGE_URL}/objects/{path}",
+        headers={"X-Storage-Key": key, "Content-Type": content_type},
+        data=data, timeout=120
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+def get_object(path: str):
+    key = init_storage()
+    resp = http_requests.get(
+        f"{STORAGE_URL}/objects/{path}",
+        headers={"X-Storage-Key": key}, timeout=60
+    )
+    resp.raise_for_status()
+    return resp.content, resp.headers.get("Content-Type", "application/octet-stream")
+
 
 # --- Pydantic Models ---
 class LoginRequest(BaseModel):
@@ -58,6 +94,7 @@ class DealCreate(BaseModel):
     value_date: str
     deal_date: str
     transfer_type: str
+    client_name: str
     from_company: str
     from_bank: str
     from_account_num: str
@@ -201,6 +238,10 @@ async def delete_user(user_id: str, user=Depends(get_current_user)):
 @api_router.get("/deals")
 async def list_deals(
     status_filter: Optional[str] = Query(None, alias="status"),
+    client: Optional[str] = Query(None),
+    currency: Optional[str] = Query(None),
+    date_from: Optional[str] = Query(None),
+    date_to: Optional[str] = Query(None),
     user=Depends(get_current_user)
 ):
     query = {}
@@ -208,6 +249,14 @@ async def list_deals(
         query["created_by"] = user["id"]
     if status_filter:
         query["status"] = status_filter
+    if client:
+        query["client_name"] = {"$regex": client, "$options": "i"}
+    if currency:
+        query["$or"] = [{"buy_currency": currency}, {"sell_currency": currency}]
+    if date_from:
+        query.setdefault("deal_date", {})["$gte"] = date_from
+    if date_to:
+        query.setdefault("deal_date", {})["$lte"] = date_to
     deals = await db.deals.find(query, {"_id": 0}).sort("created_at", -1).to_list(10000)
     return deals
 
@@ -221,6 +270,7 @@ async def create_deal(req: DealCreate, user=Depends(get_current_user)):
         **req.model_dump(),
         "status": "pending",
         "treasury_remarks": "",
+        "settlement_proofs": [],
         "created_by": user["id"],
         "created_by_name": user["name"],
         "processed_by": None,
@@ -241,6 +291,42 @@ async def get_deal(deal_id: str, user=Depends(get_current_user)):
     if user["role"] == "trader" and deal["created_by"] != user["id"]:
         raise HTTPException(status_code=403, detail="Access denied")
     return deal
+
+@api_router.post("/deals/{deal_id}/upload")
+async def upload_settlement_proof(deal_id: str, file: UploadFile = File(...), user=Depends(get_current_user)):
+    deal = await db.deals.find_one({"id": deal_id}, {"_id": 0})
+    if not deal:
+        raise HTTPException(status_code=404, detail="Deal not found")
+    allowed = ["image/jpeg", "image/png", "image/webp", "image/gif"]
+    if file.content_type not in allowed:
+        raise HTTPException(status_code=400, detail="Only image files (JPEG, PNG, WebP, GIF) are allowed")
+    data = await file.read()
+    if len(data) > 10 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="File too large (max 10MB)")
+    ext = file.filename.split(".")[-1] if "." in file.filename else "jpg"
+    path = f"{APP_NAME}/deals/{deal_id}/{uuid.uuid4().hex}.{ext}"
+    try:
+        put_object(path, data, file.content_type)
+    except Exception as e:
+        logger.error(f"Upload failed: {e}")
+        raise HTTPException(status_code=500, detail="Upload failed")
+    proof = {"id": str(uuid.uuid4()), "path": path, "filename": file.filename, "content_type": file.content_type, "uploaded_at": datetime.now(timezone.utc).isoformat(), "uploaded_by": user["name"]}
+    await db.deals.update_one({"id": deal_id}, {"$push": {"settlement_proofs": proof}})
+    return proof
+
+@api_router.get("/files/{path:path}")
+async def get_file(path: str, user=Depends(get_current_user)):
+    try:
+        data, ct = get_object(path)
+        return Response(content=data, media_type=ct)
+    except Exception as e:
+        logger.error(f"File fetch failed: {e}")
+        raise HTTPException(status_code=404, detail="File not found")
+
+@api_router.delete("/deals/{deal_id}/proofs/{proof_id}")
+async def delete_settlement_proof(deal_id: str, proof_id: str, user=Depends(get_current_user)):
+    await db.deals.update_one({"id": deal_id}, {"$pull": {"settlement_proofs": {"id": proof_id}}})
+    return {"message": "Proof deleted"}
 
 @api_router.put("/deals/{deal_id}/process")
 async def process_deal(deal_id: str, req: DealProcess, user=Depends(get_current_user)):
