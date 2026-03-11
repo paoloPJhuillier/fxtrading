@@ -1,15 +1,17 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '@/lib/api';
+import { cn } from '@/lib/utils';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGroup, SelectLabel } from '@/components/ui/select';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Command, CommandInput, CommandList, CommandEmpty, CommandGroup, CommandItem } from '@/components/ui/command';
 import { Calendar } from '@/components/ui/calendar';
-import { CalendarIcon, ArrowLeft } from 'lucide-react';
+import { CalendarIcon, ArrowLeft, ChevronsUpDown, Check } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 
@@ -42,7 +44,17 @@ export default function NewDealPage() {
     }).catch(console.error);
   }, []);
 
-  const up = (k, v) => setF(p => ({ ...p, [k]: v }));
+  const up = (k, v) => {
+    setF(p => {
+      const next = { ...p, [k]: v };
+      if (k === 'currency_amount' || k === 'rate') {
+        const ca = parseFloat(k === 'currency_amount' ? v : next.currency_amount) || 0;
+        const r = parseFloat(k === 'rate' ? v : next.rate) || 0;
+        next.amount = (ca > 0 && r > 0) ? (ca * r).toFixed(2) : '';
+      }
+      return next;
+    });
+  };
 
   const submit = async (e) => {
     e.preventDefault();
@@ -123,8 +135,8 @@ export default function NewDealPage() {
                 <Field label="Rate">
                   <Input type="number" step="0.000001" value={f.rate} onChange={e => up('rate', e.target.value)} placeholder="0.000000" data-testid="rate-input" />
                 </Field>
-                <Field label="Amount">
-                  <Input type="number" step="0.01" value={f.amount} onChange={e => up('amount', e.target.value)} placeholder="0.00" data-testid="amount-input" />
+                <Field label="Amount (auto-computed)">
+                  <Input type="number" step="0.01" value={f.amount} readOnly className="bg-slate-50 font-medium" placeholder="0.00" data-testid="amount-input" />
                 </Field>
               </div>
             </CardContent>
@@ -216,25 +228,63 @@ function DatePick({ label, value, onChange, tid }) {
 }
 
 function CurrSel({ label, value, onChange, fiat, stablecoin, crypto, tid }) {
+  const [open, setOpen] = useState(false);
+  const all = [...fiat, ...stablecoin, ...crypto];
+  const selected = all.find(c => c.code === value);
+
   return (
     <Field label={label}>
-      <Select value={value} onValueChange={onChange}>
-        <SelectTrigger data-testid={`${tid}-select`}><SelectValue placeholder="Select..." /></SelectTrigger>
-        <SelectContent>
-          <SelectGroup>
-            <SelectLabel className="text-xs text-slate-400">Fiat Currencies</SelectLabel>
-            {fiat.map(c => <SelectItem key={c.id} value={c.code}>{c.code} - {c.name}</SelectItem>)}
-          </SelectGroup>
-          <SelectGroup>
-            <SelectLabel className="text-xs text-slate-400">Stablecoins</SelectLabel>
-            {stablecoin.map(c => <SelectItem key={c.id} value={c.code}>{c.code} - {c.name}</SelectItem>)}
-          </SelectGroup>
-          <SelectGroup>
-            <SelectLabel className="text-xs text-slate-400">Cryptocurrencies</SelectLabel>
-            {crypto.map(c => <SelectItem key={c.id} value={c.code}>{c.code} - {c.name}</SelectItem>)}
-          </SelectGroup>
-        </SelectContent>
-      </Select>
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <Button variant="outline" role="combobox" aria-expanded={open}
+            className="w-full justify-between text-left font-normal h-9 text-sm"
+            data-testid={`${tid}-select`}>
+            <span className="truncate">{selected ? `${selected.code} - ${selected.name}` : 'Search currency...'}</span>
+            <ChevronsUpDown className="ml-1 h-3.5 w-3.5 shrink-0 text-slate-400" />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-[280px] p-0" align="start">
+          <Command>
+            <CommandInput placeholder="Type to search..." data-testid={`${tid}-search`} />
+            <CommandList>
+              <CommandEmpty>No currency found.</CommandEmpty>
+              {fiat.length > 0 && (
+                <CommandGroup heading="Fiat Currencies">
+                  {fiat.map(c => (
+                    <CommandItem key={c.id} value={`${c.code} ${c.name}`} onSelect={() => { onChange(c.code); setOpen(false); }}>
+                      <Check className={cn("mr-2 h-3 w-3", value === c.code ? "opacity-100" : "opacity-0")} />
+                      <span className="font-mono text-xs mr-2">{c.code}</span>
+                      <span className="text-xs text-slate-500 truncate">{c.name}</span>
+                    </CommandItem>
+                  ))}
+                </CommandGroup>
+              )}
+              {stablecoin.length > 0 && (
+                <CommandGroup heading="Stablecoins">
+                  {stablecoin.map(c => (
+                    <CommandItem key={c.id} value={`${c.code} ${c.name}`} onSelect={() => { onChange(c.code); setOpen(false); }}>
+                      <Check className={cn("mr-2 h-3 w-3", value === c.code ? "opacity-100" : "opacity-0")} />
+                      <span className="font-mono text-xs mr-2">{c.code}</span>
+                      <span className="text-xs text-slate-500 truncate">{c.name}</span>
+                    </CommandItem>
+                  ))}
+                </CommandGroup>
+              )}
+              {crypto.length > 0 && (
+                <CommandGroup heading="Cryptocurrencies">
+                  {crypto.map(c => (
+                    <CommandItem key={c.id} value={`${c.code} ${c.name}`} onSelect={() => { onChange(c.code); setOpen(false); }}>
+                      <Check className={cn("mr-2 h-3 w-3", value === c.code ? "opacity-100" : "opacity-0")} />
+                      <span className="font-mono text-xs mr-2">{c.code}</span>
+                      <span className="text-xs text-slate-500 truncate">{c.name}</span>
+                    </CommandItem>
+                  ))}
+                </CommandGroup>
+              )}
+            </CommandList>
+          </Command>
+        </PopoverContent>
+      </Popover>
     </Field>
   );
 }
