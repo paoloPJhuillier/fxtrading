@@ -27,17 +27,13 @@ const PAGE_SIZE = 20;
 export default function DealsPage() {
   const [data, setData] = useState({ deals: [], total: 0, page: 1, pages: 1 });
   const [filter, setFilter] = useState({ status: 'all', client: '', currency: '', date_from: '', date_to: '' });
+  const [debouncedFilter, setDebouncedFilter] = useState(filter);
   const [page, setPage] = useState(1);
-  const [showFilters, setShowFilters] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [sel, setSel] = useState(null);
-  const [cancelOpen, setCancelOpen] = useState(false);
-  const [cancelReason, setCancelReason] = useState('');
-  const [cancelling, setCancelling] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const [resubmitting, setResubmitting] = useState(false);
-  const fileRef = useRef(null);
-  const navigate = useNavigate();
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedFilter(filter), 400);
+    return () => clearTimeout(t);
+  }, [filter]);
 
   const fetchDeals = useCallback(async () => {
     setLoading(true);
@@ -45,16 +41,16 @@ export default function DealsPage() {
       const params = new URLSearchParams();
       params.append('page', page);
       params.append('limit', PAGE_SIZE);
-      if (filter.status !== 'all') params.append('status', filter.status);
-      if (filter.client) params.append('client', filter.client);
-      if (filter.currency) params.append('currency', filter.currency);
-      if (filter.date_from) params.append('date_from', filter.date_from);
-      if (filter.date_to) params.append('date_to', filter.date_to);
+      if (debouncedFilter.status !== 'all') params.append('status', debouncedFilter.status);
+      if (debouncedFilter.client) params.append('client', debouncedFilter.client);
+      if (debouncedFilter.currency) params.append('currency', debouncedFilter.currency);
+      if (debouncedFilter.date_from) params.append('date_from', debouncedFilter.date_from);
+      if (debouncedFilter.date_to) params.append('date_to', debouncedFilter.date_to);
       const res = await api.get(`/deals?${params.toString()}`);
       setData(res.data);
     } catch (err) { console.error(err); }
     finally { setLoading(false); }
-  }, [filter, page]);
+  }, [debouncedFilter, page]);
 
   useEffect(() => { fetchDeals(); }, [fetchDeals]);
 

@@ -33,9 +33,15 @@ export default function TreasuryPage() {
   const [page, setPage] = useState(1);
   const [showFilters, setShowFilters] = useState(false);
   const [filter, setFilter] = useState({ client: '', currency: '', date_from: '', date_to: '' });
+  const [debouncedFilter, setDebouncedFilter] = useState(filter);
   const [confirmAction, setConfirmAction] = useState(null);
   const [uploading, setUploading] = useState(false);
   const fileRef = useRef(null);
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedFilter(filter), 400);
+    return () => clearTimeout(t);
+  }, [filter]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -43,15 +49,15 @@ export default function TreasuryPage() {
       const params = new URLSearchParams();
       params.append('page', page);
       params.append('limit', PAGE_SIZE);
-      if (filter.client) params.append('client', filter.client);
-      if (filter.currency) params.append('currency', filter.currency);
-      if (filter.date_from) params.append('date_from', filter.date_from);
-      if (filter.date_to) params.append('date_to', filter.date_to);
+      if (debouncedFilter.client) params.append('client', debouncedFilter.client);
+      if (debouncedFilter.currency) params.append('currency', debouncedFilter.currency);
+      if (debouncedFilter.date_from) params.append('date_from', debouncedFilter.date_from);
+      if (debouncedFilter.date_to) params.append('date_to', debouncedFilter.date_to);
       const r = await api.get(`/deals?${params.toString()}`);
       setData(r.data);
     } catch (e) { console.error(e); }
     finally { setLoading(false); }
-  }, [filter, page]);
+  }, [debouncedFilter, page]);
 
   useEffect(() => { load(); }, [load]);
 

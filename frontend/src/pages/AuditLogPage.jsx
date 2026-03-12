@@ -33,6 +33,12 @@ export default function AuditLogPage() {
   const [showFilters, setShowFilters] = useState(false);
   const [page, setPage] = useState(1);
   const [filter, setFilter] = useState({ action: 'all', entity_type: 'all', user_name: '', date_from: '', date_to: '' });
+  const [debouncedFilter, setDebouncedFilter] = useState(filter);
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedFilter(filter), 400);
+    return () => clearTimeout(t);
+  }, [filter]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -40,16 +46,16 @@ export default function AuditLogPage() {
       const params = new URLSearchParams();
       params.append('page', page);
       params.append('limit', 50);
-      if (filter.action !== 'all') params.append('action', filter.action);
-      if (filter.entity_type !== 'all') params.append('entity_type', filter.entity_type);
-      if (filter.user_name) params.append('user_name', filter.user_name);
-      if (filter.date_from) params.append('date_from', filter.date_from);
-      if (filter.date_to) params.append('date_to', filter.date_to);
+      if (debouncedFilter.action !== 'all') params.append('action', debouncedFilter.action);
+      if (debouncedFilter.entity_type !== 'all') params.append('entity_type', debouncedFilter.entity_type);
+      if (debouncedFilter.user_name) params.append('user_name', debouncedFilter.user_name);
+      if (debouncedFilter.date_from) params.append('date_from', debouncedFilter.date_from);
+      if (debouncedFilter.date_to) params.append('date_to', debouncedFilter.date_to);
       const res = await api.get(`/audit-logs?${params.toString()}`);
       setData(res.data);
     } catch (e) { console.error(e); }
     finally { setLoading(false); }
-  }, [page, filter]);
+  }, [page, debouncedFilter]);
 
   useEffect(() => { load(); }, [load]);
 

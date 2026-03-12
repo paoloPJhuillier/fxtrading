@@ -22,10 +22,16 @@ export default function UsersPage() {
   const [data, setData] = useState({ users: [], total: 0, page: 1, pages: 1 });
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const [edit, setEdit] = useState(null);
   const [form, setForm] = useState({ name: '', email: '', password: '', role: 'trader' });
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 400);
+    return () => clearTimeout(t);
+  }, [search]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -33,12 +39,12 @@ export default function UsersPage() {
       const params = new URLSearchParams();
       params.append('page', page);
       params.append('limit', PAGE_SIZE);
-      if (search) params.append('search', search);
+      if (debouncedSearch) params.append('search', debouncedSearch);
       const r = await api.get(`/users?${params.toString()}`);
       setData(r.data);
     } catch (e) { console.error(e); }
     finally { setLoading(false); }
-  }, [page, search]);
+  }, [page, debouncedSearch]);
 
   useEffect(() => { load(); }, [load]);
 
