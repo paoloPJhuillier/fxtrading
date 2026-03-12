@@ -32,6 +32,7 @@ Mobile-responsive full-stack FX Trading Tracker platform with:
 - [x] Settlement proof upload (Treasury)
 - [x] Bank/Crypto toggle and "Ours" section on deal form
 - [x] **P0 Performance Fix (Feb 2026):** React.memo on all table rows (DealRow, TreasuryRow, TxRow, UserRow, AuditRow) + useCallback for handlers. Modal open times reduced from ~12s to <0.2s
+- [x] **Dialog Close Overlay Fix (Mar 2026):** Reduced overlay from bg-black/80 to bg-black/40, sped up animation to 150ms, and implemented useRef pattern to preserve dialog content during exit animation. Eliminates black flash on modal close.
 
 ## P0/P1/P2 Backlog
 - No pending issues or feature requests
