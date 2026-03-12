@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, memo, useMemo } from 'react';
 import api from '@/lib/api';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -72,6 +72,8 @@ export default function TransactionHistoryPage() {
     } catch (e) { console.error('Export failed', e); }
   };
 
+  const viewDeal = useCallback((deal) => setSel(deal), []);
+
   return (
     <div data-testid="transaction-history-page">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
@@ -135,17 +137,7 @@ export default function TransactionHistoryPage() {
               </TableHeader>
               <TableBody>
                 {data.deals.map(d => (
-                  <TableRow key={d.id} data-testid={`tx-row-${d.id}`}>
-                    <TableCell className="font-mono text-xs font-medium text-[#08263e]">{d.reference_number}</TableCell>
-                    <TableCell className="text-sm">{d.client_name || '-'}</TableCell>
-                    <TableCell className="text-sm">{d.created_by_name}</TableCell>
-                    <TableCell className="font-mono text-xs">{d.buy_currency}/{d.sell_currency}</TableCell>
-                    <TableCell className="text-right font-mono text-xs">{Number(d.amount).toLocaleString()}</TableCell>
-                    <TableCell className="text-right font-mono text-xs">{d.rate}</TableCell>
-                    <TableCell className="text-xs">{format(new Date(d.deal_date + 'T00:00:00'), 'dd MMM yyyy')}</TableCell>
-                    <TableCell><Badge className={SB[d.status]}>{d.status}</Badge></TableCell>
-                    <TableCell><Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => setSel(d)} data-testid={`tx-view-${d.id}`}><Eye className="h-3.5 w-3.5" /></Button></TableCell>
-                  </TableRow>
+                  <TxRow key={d.id} deal={d} onView={viewDeal} />
                 ))}
               </TableBody>
             </Table>
@@ -201,7 +193,7 @@ export default function TransactionHistoryPage() {
                     <div className="grid grid-cols-3 gap-2">
                       {sel.settlement_proofs.map(p => (
                         <a key={p.id} href={`${BACKEND_URL}/api/files/${p.path}`} target="_blank" rel="noopener noreferrer" className="block border rounded overflow-hidden hover:ring-2 ring-[#518dca]">
-                          <img src={`${BACKEND_URL}/api/files/${p.path}`} alt={p.filename} className="w-full h-20 object-cover" />
+                          <img src={`${BACKEND_URL}/api/files/${p.path}`} alt={p.filename} className="w-full h-20 object-cover" loading="lazy" decoding="async" />
                           <p className="text-[10px] text-slate-500 p-1 truncate">{p.filename}</p>
                         </a>
                       ))}
@@ -234,3 +226,23 @@ function OursInfo({ deal }) {
     : (<p className="text-sm font-medium">{deal.ours_bank || '-'} <span className="font-mono text-xs">({deal.ours_account_num || '-'})</span></p>)}
   </div>);
 }
+
+const TxRow = memo(function TxRow({ deal, onView }) {
+  return (
+    <TableRow data-testid={`tx-row-${deal.id}`}>
+      <TableCell className="font-mono text-xs font-medium text-[#08263e]">{deal.reference_number}</TableCell>
+      <TableCell className="text-sm">{deal.client_name || '-'}</TableCell>
+      <TableCell className="text-sm">{deal.created_by_name}</TableCell>
+      <TableCell className="font-mono text-xs">{deal.buy_currency}/{deal.sell_currency}</TableCell>
+      <TableCell className="text-right font-mono text-xs">{Number(deal.amount).toLocaleString()}</TableCell>
+      <TableCell className="text-right font-mono text-xs">{deal.rate}</TableCell>
+      <TableCell className="text-xs">{format(new Date(deal.deal_date + 'T00:00:00'), 'dd MMM yyyy')}</TableCell>
+      <TableCell><Badge className={SB[deal.status]}>{deal.status}</Badge></TableCell>
+      <TableCell>
+        <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => onView(deal)} data-testid={`view-tx-${deal.id}`}>
+          <Eye className="h-3.5 w-3.5" />
+        </Button>
+      </TableCell>
+    </TableRow>
+  );
+});

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, memo, useMemo } from 'react';
 import api from '@/lib/api';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -107,39 +107,10 @@ export default function TreasuryPage() {
     } catch (err) { toast.error('Delete failed'); }
   };
 
-  const pending = data.deals.filter(d => d.status === 'pending');
-  const done = data.deals.filter(d => d.status !== 'pending');
+  const pending = useMemo(() => data.deals.filter(d => d.status === 'pending'), [data.deals]);
+  const done = useMemo(() => data.deals.filter(d => d.status !== 'pending'), [data.deals]);
 
-  const DealTable = ({ deals, showActions }) => (
-    deals.length === 0 ? <p className="text-center py-16 text-slate-400">No deals</p> :
-    <Table>
-      <TableHeader><TableRow className="bg-slate-50">
-        <TableHead>Reference</TableHead><TableHead>Client</TableHead><TableHead>Trader</TableHead>
-        <TableHead>Type</TableHead><TableHead>Pair</TableHead><TableHead className="text-right">Amount</TableHead>
-        <TableHead className="text-right">Rate</TableHead><TableHead>Deal Date</TableHead>
-        {!showActions && <TableHead>Status</TableHead>}
-        <TableHead>Action</TableHead>
-      </TableRow></TableHeader>
-      <TableBody>{deals.map(d => (
-        <TableRow key={d.id} data-testid={`${showActions ? 'pending' : 'processed'}-deal-${d.id}`}>
-          <TableCell className="font-mono text-xs font-medium">{d.reference_number}</TableCell>
-          <TableCell className="text-sm">{d.client_name || '-'}</TableCell>
-          <TableCell className="text-sm">{d.created_by_name}</TableCell>
-          <TableCell className="text-sm">{d.transaction_type}</TableCell>
-          <TableCell className="font-mono text-xs">{d.buy_currency}/{d.sell_currency}</TableCell>
-          <TableCell className="text-right font-mono text-xs">{Number(d.amount).toLocaleString()}</TableCell>
-          <TableCell className="text-right font-mono text-xs">{d.rate}</TableCell>
-          <TableCell className="text-xs">{format(new Date(d.deal_date + 'T00:00:00'), 'dd MMM yyyy')}</TableCell>
-          {!showActions && <TableCell><Badge className={SB[d.status]}>{d.status}</Badge></TableCell>}
-          <TableCell>
-            <Button size="sm" variant="outline" onClick={() => { setSel(d); setRemarks(''); }} data-testid={`review-deal-${d.id}`}>
-              <Eye className="h-3 w-3 mr-1" /> {showActions ? 'Review' : 'View'}
-            </Button>
-          </TableCell>
-        </TableRow>
-      ))}</TableBody>
-    </Table>
-  );
+  const openReview = useCallback((d) => { setSel(d); setRemarks(''); }, []);
 
   return (
     <div data-testid="treasury-page">
@@ -183,12 +154,35 @@ export default function TreasuryPage() {
         <TabsContent value="pending" className="mt-4">
           <Card><CardContent className="p-0">
             {loading ? <div className="flex items-center justify-center h-32"><div className="animate-spin h-6 w-6 border-4 border-[#518dca] border-t-transparent rounded-full" /></div>
-            : <DealTable deals={pending} showActions />}
+            : pending.length === 0 ? <p className="text-center py-16 text-slate-400">No deals</p> :
+            <Table>
+              <TableHeader><TableRow className="bg-slate-50">
+                <TableHead>Reference</TableHead><TableHead>Client</TableHead><TableHead>Trader</TableHead>
+                <TableHead>Type</TableHead><TableHead>Pair</TableHead><TableHead className="text-right">Amount</TableHead>
+                <TableHead className="text-right">Rate</TableHead><TableHead>Deal Date</TableHead>
+                <TableHead>Action</TableHead>
+              </TableRow></TableHeader>
+              <TableBody>{pending.map(d => (
+                <TreasuryRow key={d.id} deal={d} showActions onReview={openReview} />
+              ))}</TableBody>
+            </Table>}
           </CardContent></Card>
         </TabsContent>
         <TabsContent value="processed" className="mt-4">
           <Card><CardContent className="p-0">
-            <DealTable deals={done} showActions={false} />
+            {done.length === 0 ? <p className="text-center py-16 text-slate-400">No deals</p> :
+            <Table>
+              <TableHeader><TableRow className="bg-slate-50">
+                <TableHead>Reference</TableHead><TableHead>Client</TableHead><TableHead>Trader</TableHead>
+                <TableHead>Type</TableHead><TableHead>Pair</TableHead><TableHead className="text-right">Amount</TableHead>
+                <TableHead className="text-right">Rate</TableHead><TableHead>Deal Date</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Action</TableHead>
+              </TableRow></TableHeader>
+              <TableBody>{done.map(d => (
+                <TreasuryRow key={d.id} deal={d} showActions={false} onReview={openReview} />
+              ))}</TableBody>
+            </Table>}
           </CardContent></Card>
         </TabsContent>
       </Tabs>
@@ -248,7 +242,7 @@ export default function TreasuryPage() {
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                     {sel.settlement_proofs.map(p => (
                       <div key={p.id} className="relative group border rounded-lg overflow-hidden">
-                        <img src={`${BACKEND_URL}/api/files/${p.path}`} alt={p.filename} className="w-full h-28 object-cover" />
+                        <img src={`${BACKEND_URL}/api/files/${p.path}`} alt={p.filename} className="w-full h-28 object-cover" loading="lazy" decoding="async" />
                         <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
                           <a href={`${BACKEND_URL}/api/files/${p.path}`} target="_blank" rel="noopener noreferrer" className="text-white"><Eye className="h-4 w-4" /></a>
                           <button onClick={() => deleteProof(p.id)} className="text-white hover:text-red-300"><Trash2 className="h-4 w-4" /></button>
@@ -352,3 +346,24 @@ function OursInfo({ deal }) {
     </div>
   );
 }
+
+const TreasuryRow = memo(function TreasuryRow({ deal, showActions, onReview }) {
+  return (
+    <TableRow data-testid={`${showActions ? 'pending' : 'processed'}-deal-${deal.id}`}>
+      <TableCell className="font-mono text-xs font-medium">{deal.reference_number}</TableCell>
+      <TableCell className="text-sm">{deal.client_name || '-'}</TableCell>
+      <TableCell className="text-sm">{deal.created_by_name}</TableCell>
+      <TableCell className="text-sm">{deal.transaction_type}</TableCell>
+      <TableCell className="font-mono text-xs">{deal.buy_currency}/{deal.sell_currency}</TableCell>
+      <TableCell className="text-right font-mono text-xs">{Number(deal.amount).toLocaleString()}</TableCell>
+      <TableCell className="text-right font-mono text-xs">{deal.rate}</TableCell>
+      <TableCell className="text-xs">{format(new Date(deal.deal_date + 'T00:00:00'), 'dd MMM yyyy')}</TableCell>
+      {!showActions && <TableCell><Badge className={SB[deal.status]}>{deal.status}</Badge></TableCell>}
+      <TableCell>
+        <Button size="sm" variant="outline" onClick={() => onReview(deal)} data-testid={`review-deal-${deal.id}`}>
+          <Eye className="h-3 w-3 mr-1" /> {showActions ? 'Review' : 'View'}
+        </Button>
+      </TableCell>
+    </TableRow>
+  );
+});

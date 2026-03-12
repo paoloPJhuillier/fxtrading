@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, memo } from 'react';
 import api from '@/lib/api';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -49,7 +49,7 @@ export default function UsersPage() {
   useEffect(() => { load(); }, [load]);
 
   const openNew = () => { setEdit(null); setForm({ name: '', email: '', password: '', role: 'trader' }); setOpen(true); };
-  const openEdit = (u) => { setEdit(u); setForm({ name: u.name, email: u.email, password: '', role: u.role }); setOpen(true); };
+  const openEdit = useCallback((u) => { setEdit(u); setForm({ name: u.name, email: u.email, password: '', role: u.role }); setOpen(true); }, []);
 
   const save = async () => {
     try {
@@ -67,11 +67,11 @@ export default function UsersPage() {
     } catch (e) { toast.error(e.response?.data?.detail || 'Save failed'); }
   };
 
-  const del = async (id) => {
+  const del = useCallback(async (id) => {
     if (!window.confirm('Delete this user?')) return;
     try { await api.delete(`/users/${id}`); toast.success('User deleted'); load(); }
     catch (e) { toast.error('Delete failed'); }
-  };
+  }, [load]);
 
   return (
     <div data-testid="users-page">
@@ -108,24 +108,7 @@ export default function UsersPage() {
               </TableHeader>
               <TableBody>
                 {data.users.map(u => (
-                  <TableRow key={u.id} data-testid={`user-row-${u.id}`}>
-                    <TableCell className="font-medium text-sm">{u.name}</TableCell>
-                    <TableCell className="text-sm text-slate-500">{u.email}</TableCell>
-                    <TableCell>
-                      <Badge className={ROLE_BADGE[u.role]}>{u.role === 'treasury' ? 'Treasury Ops' : u.role}</Badge>
-                    </TableCell>
-                    <TableCell>
-                      <Badge className={u.is_active !== false ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}>
-                        {u.is_active !== false ? 'Active' : 'Inactive'}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex justify-end gap-1">
-                        <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => openEdit(u)} data-testid={`edit-user-${u.id}`}><Pencil className="h-3 w-3" /></Button>
-                        <Button size="icon" variant="ghost" className="h-8 w-8 text-red-500 hover:text-red-700" onClick={() => del(u.id)} data-testid={`delete-user-${u.id}`}><Trash2 className="h-3 w-3" /></Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
+                  <UserRow key={u.id} user={u} onEdit={openEdit} onDelete={del} />
                 ))}
               </TableBody>
             </Table>
@@ -186,3 +169,26 @@ export default function UsersPage() {
     </div>
   );
 }
+
+const UserRow = memo(function UserRow({ user, onEdit, onDelete }) {
+  return (
+    <TableRow data-testid={`user-row-${user.id}`}>
+      <TableCell className="font-medium text-sm">{user.name}</TableCell>
+      <TableCell className="text-sm text-slate-500">{user.email}</TableCell>
+      <TableCell>
+        <Badge className={ROLE_BADGE[user.role]}>{user.role === 'treasury' ? 'Treasury Ops' : user.role}</Badge>
+      </TableCell>
+      <TableCell>
+        <Badge className={user.is_active !== false ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}>
+          {user.is_active !== false ? 'Active' : 'Inactive'}
+        </Badge>
+      </TableCell>
+      <TableCell className="text-right">
+        <div className="flex justify-end gap-1">
+          <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => onEdit(user)} data-testid={`edit-user-${user.id}`}><Pencil className="h-3 w-3" /></Button>
+          <Button size="icon" variant="ghost" className="h-8 w-8 text-red-500 hover:text-red-700" onClick={() => onDelete(user.id)} data-testid={`delete-user-${user.id}`}><Trash2 className="h-3 w-3" /></Button>
+        </div>
+      </TableCell>
+    </TableRow>
+  );
+});

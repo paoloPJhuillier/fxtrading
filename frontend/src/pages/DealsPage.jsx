@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, memo, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '@/lib/api';
 import { Card, CardContent } from '@/components/ui/card';
@@ -135,6 +135,11 @@ export default function DealsPage() {
     finally { setResubmitting(false); }
   };
 
+  const viewDeal = useCallback(async (dealId) => {
+    const r = await api.get(`/deals/${dealId}`);
+    setSel(r.data);
+  }, []);
+
   return (
     <div data-testid="deals-page">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
@@ -205,21 +210,7 @@ export default function DealsPage() {
               </TableHeader>
               <TableBody>
                 {data.deals.map(deal => (
-                  <TableRow key={deal.id} data-testid={`deal-row-${deal.id}`}>
-                    <TableCell className="font-mono text-xs font-medium text-[#08263e]">{deal.reference_number}</TableCell>
-                    <TableCell className="text-sm">{deal.client_name || '-'}</TableCell>
-                    <TableCell className="text-sm">{deal.transaction_type}</TableCell>
-                    <TableCell className="font-mono text-xs">{deal.buy_currency}/{deal.sell_currency}</TableCell>
-                    <TableCell className="text-right font-mono text-xs">{Number(deal.amount).toLocaleString()}</TableCell>
-                    <TableCell className="text-right font-mono text-xs">{deal.rate}</TableCell>
-                    <TableCell className="text-xs">{format(new Date(deal.deal_date + 'T00:00:00'), 'dd MMM yyyy')}</TableCell>
-                    <TableCell><Badge className={SB[deal.status]}>{deal.status}</Badge></TableCell>
-                    <TableCell>
-                      <Button size="icon" variant="ghost" className="h-8 w-8" onClick={async () => { const r = await api.get(`/deals/${deal.id}`); setSel(r.data); }} data-testid={`view-deal-${deal.id}`}>
-                        <Eye className="h-3.5 w-3.5" />
-                      </Button>
-                    </TableCell>
-                  </TableRow>
+                  <DealRow key={deal.id} deal={deal} onView={viewDeal} />
                 ))}
               </TableBody>
             </Table>
@@ -309,7 +300,7 @@ export default function DealsPage() {
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                     {sel.settlement_proofs.map(p => (
                       <div key={p.id} className="relative group border rounded-lg overflow-hidden">
-                        <img src={`${BACKEND_URL}/api/files/${p.path}`} alt={p.filename} className="w-full h-28 object-cover" />
+                        <img src={`${BACKEND_URL}/api/files/${p.path}`} alt={p.filename} className="w-full h-28 object-cover" loading="lazy" decoding="async" />
                         <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
                           <a href={`${BACKEND_URL}/api/files/${p.path}`} target="_blank" rel="noopener noreferrer" className="text-white"><Eye className="h-4 w-4" /></a>
                           {(sel.status === 'pending' || sel.status === 'returned') && (
@@ -388,3 +379,23 @@ function OursInfo({ deal }) {
     </div>
   );
 }
+
+const DealRow = memo(function DealRow({ deal, onView }) {
+  return (
+    <TableRow data-testid={`deal-row-${deal.id}`}>
+      <TableCell className="font-mono text-xs font-medium text-[#08263e]">{deal.reference_number}</TableCell>
+      <TableCell className="text-sm">{deal.client_name || '-'}</TableCell>
+      <TableCell className="text-sm">{deal.transaction_type}</TableCell>
+      <TableCell className="font-mono text-xs">{deal.buy_currency}/{deal.sell_currency}</TableCell>
+      <TableCell className="text-right font-mono text-xs">{Number(deal.amount).toLocaleString()}</TableCell>
+      <TableCell className="text-right font-mono text-xs">{deal.rate}</TableCell>
+      <TableCell className="text-xs">{format(new Date(deal.deal_date + 'T00:00:00'), 'dd MMM yyyy')}</TableCell>
+      <TableCell><Badge className={SB[deal.status]}>{deal.status}</Badge></TableCell>
+      <TableCell>
+        <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => onView(deal.id)} data-testid={`view-deal-${deal.id}`}>
+          <Eye className="h-3.5 w-3.5" />
+        </Button>
+      </TableCell>
+    </TableRow>
+  );
+});

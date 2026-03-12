@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, memo } from 'react';
 import api from '@/lib/api';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -130,25 +130,9 @@ export default function AuditLogPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {data.logs.map(log => {
-                  const actionInfo = ACTION_LABELS[log.action] || { label: log.action, color: 'bg-slate-100 text-slate-600' };
-                  const entityColor = ENTITY_BADGE[log.entity_type] || 'bg-slate-100 text-slate-600';
-                  return (
-                    <TableRow key={log.id} data-testid={`audit-row-${log.id}`}>
-                      <TableCell className="text-xs text-slate-500 whitespace-nowrap">{format(new Date(log.created_at), 'dd MMM yyyy HH:mm:ss')}</TableCell>
-                      <TableCell><Badge className={`${actionInfo.color} text-[10px]`}>{actionInfo.label}</Badge></TableCell>
-                      <TableCell><Badge variant="outline" className={`${entityColor} text-[10px] border-0`}>{log.entity_type}</Badge></TableCell>
-                      <TableCell className="font-mono text-xs">{log.entity_ref || '-'}</TableCell>
-                      <TableCell>
-                        <div>
-                          <p className="text-xs font-medium">{log.user_name}</p>
-                          <p className="text-[10px] text-slate-400 capitalize">{log.user_role}</p>
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-xs text-slate-600 max-w-xs truncate">{log.details}</TableCell>
-                    </TableRow>
-                  );
-                })}
+                {data.logs.map(log => (
+                  <AuditRow key={log.id} log={log} />
+                ))}
               </TableBody>
             </Table>
           )}
@@ -171,3 +155,23 @@ export default function AuditLogPage() {
     </div>
   );
 }
+
+const AuditRow = memo(function AuditRow({ log }) {
+  const actionInfo = ACTION_LABELS[log.action] || { label: log.action, color: 'bg-slate-100 text-slate-600' };
+  const entityColor = ENTITY_BADGE[log.entity_type] || 'bg-slate-100 text-slate-600';
+  return (
+    <TableRow data-testid={`audit-row-${log.id}`}>
+      <TableCell className="text-xs text-slate-500 whitespace-nowrap">{format(new Date(log.created_at), 'dd MMM yyyy HH:mm:ss')}</TableCell>
+      <TableCell><Badge className={`${actionInfo.color} text-[10px]`}>{actionInfo.label}</Badge></TableCell>
+      <TableCell><Badge variant="outline" className={`${entityColor} text-[10px] border-0`}>{log.entity_type}</Badge></TableCell>
+      <TableCell className="font-mono text-xs">{log.entity_ref || '-'}</TableCell>
+      <TableCell>
+        <div>
+          <p className="text-xs font-medium">{log.user_name}</p>
+          <p className="text-[10px] text-slate-400 capitalize">{log.user_role}</p>
+        </div>
+      </TableCell>
+      <TableCell className="text-xs text-slate-600 max-w-xs truncate">{log.details}</TableCell>
+    </TableRow>
+  );
+});
