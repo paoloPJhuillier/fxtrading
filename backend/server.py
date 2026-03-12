@@ -118,7 +118,7 @@ class DealCreate(BaseModel):
 
 class DealProcess(BaseModel):
     status: str
-    treasury_remarks: Optional[str] = ""
+    treasury_remarks: str
 
 class DealCancel(BaseModel):
     cancellation_reason: str
@@ -344,6 +344,8 @@ async def process_deal(deal_id: str, req: DealProcess, user=Depends(get_current_
     await require_role(user, ["treasury"])
     if req.status not in ["confirmed", "returned"]:
         raise HTTPException(status_code=400, detail="Status must be 'confirmed' or 'returned'")
+    if not req.treasury_remarks.strip():
+        raise HTTPException(status_code=400, detail="Treasury remarks are required")
     deal = await db.deals.find_one({"id": deal_id}, {"_id": 0})
     if not deal:
         raise HTTPException(status_code=404, detail="Deal not found")

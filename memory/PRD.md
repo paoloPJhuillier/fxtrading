@@ -37,13 +37,14 @@ Build a mobile-responsive FX Trading Tracker platform with:
 - [x] My Deals page with advanced filters (status, client, currency, date range) — includes "cancelled" filter
 - [x] Deal detail view with complete fields
 - [x] Settlement proof image upload/view/delete
-- [x] **Cancel/Recall deal** with mandatory cancellation reason (only for pending deals)
+- [x] Cancel/Recall deal with mandatory cancellation reason (only for pending deals)
 
 ### Treasury Features
 - [x] Deal Queue with Pending/Processed tabs
 - [x] Advanced filters (client, currency, date range)
 - [x] Deal review dialog with all details + settlement proofs + Ours section
-- [x] Confirm/Return deals with treasury remarks
+- [x] Confirm/Return deals with **required** treasury remarks
+- [x] **Confirmation prompt** before confirming/returning a deal (cannot be undone)
 - [x] View cancellation reason for cancelled deals
 
 ### Admin Features
@@ -51,7 +52,7 @@ Build a mobile-responsive FX Trading Tracker platform with:
 - [x] User management (CRUD)
 - [x] Transaction history view
 
-### Deal Form Enhancements (Latest)
+### Deal Form Enhancements
 - [x] **Transaction Types:** Today, Tomorrow, Spot
 - [x] **Transfer Types:** FX Crypto Conversion, FX Local, PDAX Withdrawal
 - [x] **Bank/Crypto Toggle** on Source (From) and Destination (To): Bank shows Bank+Account Number, Crypto shows Wallet Address
@@ -71,7 +72,7 @@ Build a mobile-responsive FX Trading Tracker platform with:
 - PUT /api/deals/{deal_id}/cancel (cancellation_reason required)
 - POST /api/deals/{deal_id}/upload (settlement proof)
 - DELETE /api/deals/{deal_id}/proofs/{proof_id}
-- PUT /api/deals/{deal_id}/process
+- PUT /api/deals/{deal_id}/process (treasury_remarks required)
 - GET /api/reference/{entity_type}
 - GET /api/dashboard/stats
 
@@ -84,7 +85,7 @@ Build a mobile-responsive FX Trading Tracker platform with:
 ## Backlog / Future Enhancements
 - [ ] Extract helper components (SearchSelect, CurrSel, DatePick) into separate files
 - [ ] Dashboard enhancements with more analytics/charts
-- [ ] Export deals to CSV/Excel
+- [ ] Export deals to CSV/Excel or PDF deal ticket
 - [ ] Email notifications on deal status changes
 - [ ] Audit trail / activity log
 - [ ] Deal amendment workflow (edit pending deals)

@@ -10,7 +10,7 @@ import { Separator } from '@/components/ui/separator';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { CheckCircle, XCircle, Eye, Filter, X, Image as ImageIcon } from 'lucide-react';
+import { CheckCircle, XCircle, Eye, Filter, X, Image as ImageIcon, AlertTriangle } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 
@@ -27,6 +27,7 @@ export default function TreasuryPage() {
   const [remarks, setRemarks] = useState('');
   const [processing, setProcessing] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [confirmAction, setConfirmAction] = useState(null);
   const [tab, setTab] = useState('pending');
   const [showFilters, setShowFilters] = useState(false);
   const [filter, setFilter] = useState({ client: '', currency: '', date_from: '', date_to: '' });
@@ -47,15 +48,20 @@ export default function TreasuryPage() {
 
   useEffect(() => { load(); }, [load]);
 
-  const process = async (status) => {
-    if (!sel) return;
+  const tryProcess = (status) => {
+    if (!remarks.trim()) { toast.error('Treasury remarks are required'); return; }
+    setConfirmAction(status);
+  };
+
+  const process = async () => {
+    if (!sel || !confirmAction) return;
     setProcessing(true);
     try {
-      await api.put(`/deals/${sel.id}/process`, { status, treasury_remarks: remarks });
-      toast.success(`Deal ${status === 'confirmed' ? 'confirmed' : 'returned'}`);
-      setSel(null); setRemarks(''); load();
+      await api.put(`/deals/${sel.id}/process`, { status: confirmAction, treasury_remarks: remarks });
+      toast.success(`Deal ${confirmAction === 'confirmed' ? 'confirmed' : 'returned'}`);
+      setConfirmAction(null); setSel(null); setRemarks(''); load();
     } catch (e) { toast.error(e.response?.data?.detail || 'Failed'); }
-    finally { setProcessing(false); }
+    finally { setProcessing(false); setConfirmAction(null); }
   };
 
   const clearFilters = () => setFilter({ client: '', currency: '', date_from: '', date_to: '' });
@@ -224,8 +230,8 @@ export default function TreasuryPage() {
                 <>
                   <Separator />
                   <div className="space-y-1.5">
-                    <Label className="text-xs">Treasury Remarks</Label>
-                    <Textarea value={remarks} onChange={e => setRemarks(e.target.value)} placeholder="Add your remarks..." rows={3} data-testid="treasury-remarks-input" />
+                    <Label className="text-xs">Treasury Remarks <span className="text-red-500">*</span></Label>
+                    <Textarea value={remarks} onChange={e => setRemarks(e.target.value)} placeholder="Add your remarks (required)..." rows={3} data-testid="treasury-remarks-input" className={!remarks.trim() ? '' : ''} />
                   </div>
                 </>
               )}
@@ -234,8 +240,8 @@ export default function TreasuryPage() {
           {sel?.status === 'pending' && (
             <DialogFooter className="gap-2">
               <Button variant="outline" onClick={() => setSel(null)} data-testid="cancel-review-btn">Cancel</Button>
-              <Button className="bg-[#ec474e] hover:bg-[#ec474e]/90 text-white" onClick={() => process('returned')} disabled={processing} data-testid="return-deal-btn"><XCircle className="h-4 w-4 mr-2" /> Return</Button>
-              <Button className="bg-[#10b981] hover:bg-[#10b981]/90 text-white" onClick={() => process('confirmed')} disabled={processing} data-testid="confirm-deal-btn"><CheckCircle className="h-4 w-4 mr-2" /> Confirm</Button>
+              <Button className="bg-[#ec474e] hover:bg-[#ec474e]/90 text-white" onClick={() => tryProcess('returned')} disabled={processing} data-testid="return-deal-btn"><XCircle className="h-4 w-4 mr-2" /> Return</Button>
+              <Button className="bg-[#10b981] hover:bg-[#10b981]/90 text-white" onClick={() => tryProcess('confirmed')} disabled={processing} data-testid="confirm-deal-btn"><CheckCircle className="h-4 w-4 mr-2" /> Confirm</Button>
             </DialogFooter>
           )}
           {sel?.status !== 'pending' && (
@@ -243,6 +249,35 @@ export default function TreasuryPage() {
               <Button variant="outline" onClick={() => setSel(null)}>Close</Button>
             </DialogFooter>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Confirmation Prompt */}
+      <Dialog open={!!confirmAction} onOpenChange={o => { if (!o) setConfirmAction(null); }}>
+        <DialogContent className="max-w-sm" data-testid="confirm-process-dialog">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2" style={{ fontFamily: 'Chivo' }}>
+              <AlertTriangle className="h-5 w-5 text-[#f59e0b]" />
+              {confirmAction === 'confirmed' ? 'Confirm Deal' : 'Return Deal'}
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-slate-500">
+            Are you sure you want to <strong>{confirmAction === 'confirmed' ? 'confirm' : 'return'}</strong> deal <span className="font-mono font-medium">{sel?.reference_number}</span>? This action cannot be undone.
+          </p>
+          <div className="bg-slate-50 p-3 rounded-md">
+            <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Your Remarks</p>
+            <p className="text-sm">{remarks}</p>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setConfirmAction(null)} data-testid="confirm-process-back-btn">Go Back</Button>
+            <Button
+              className={confirmAction === 'confirmed' ? 'bg-[#10b981] hover:bg-[#10b981]/90 text-white' : 'bg-[#ec474e] hover:bg-[#ec474e]/90 text-white'}
+              onClick={process} disabled={processing}
+              data-testid="confirm-process-submit-btn"
+            >
+              {processing ? 'Processing...' : confirmAction === 'confirmed' ? 'Yes, Confirm' : 'Yes, Return'}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
