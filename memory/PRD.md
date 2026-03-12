@@ -28,64 +28,54 @@ Build a mobile-responsive FX Trading Tracker platform with:
 - [x] Dashboard with stats, date range toggles (7d, 30d, YTD)
 
 ### Trader Features
-- [x] New Deal form with all required fields
-- [x] Required field validation with error highlighting
+- [x] New Deal form with all required fields + validation
 - [x] Client Name field in deal lifecycle
 - [x] Searchable comboboxes for currencies, companies, banks
 - [x] Auto-computation of amount (currency_amount x rate)
 - [x] Pre-submission confirmation dialog
-- [x] My Deals page with advanced filters (status, client, currency, date range) — includes "cancelled" filter
+- [x] My Deals page with advanced filters + **Export CSV**
 - [x] Deal detail view with complete fields
-- [x] Settlement proof image upload/view/delete
-- [x] Cancel/Recall deal with mandatory cancellation reason (only for pending deals)
+- [x] Cancel/Recall deal with mandatory cancellation reason
+- [x] Bank/Crypto toggle on Source (From) & Destination (To)
+- [x] Ours (Receiving Account) section
 
 ### Treasury Features
-- [x] Deal Queue with Pending/Processed tabs
-- [x] Advanced filters (client, currency, date range)
-- [x] Deal review dialog with all details + settlement proofs + Ours section
-- [x] Confirm/Return deals with **required** treasury remarks
-- [x] **Confirmation prompt** before confirming/returning a deal (cannot be undone)
+- [x] Deal Queue with Pending/Processed tabs + filters
+- [x] Deal review dialog with all details, Ours section, settlement proofs
+- [x] **Settlement proof upload/view/delete** (treasury-only)
+- [x] Confirm/Return with **required** treasury remarks + confirmation prompt
 - [x] View cancellation reason for cancelled deals
 
 ### Admin Features
-- [x] Reference data management (companies, banks, transaction/transfer types, currencies)
+- [x] Reference data management
 - [x] User management (CRUD)
-- [x] Transaction history view
+- [x] Transaction History with **Export CSV**
+- [x] **Audit Trail / Activity Log** — logs deal creation, processing, cancellation, proof upload/delete, user CRUD. Filterable by action, entity type, user, date range. Paginated.
 
-### Deal Form Enhancements
-- [x] **Transaction Types:** Today, Tomorrow, Spot
-- [x] **Transfer Types:** FX Crypto Conversion, FX Local, PDAX Withdrawal
-- [x] **Bank/Crypto Toggle** on Source (From) and Destination (To): Bank shows Bank+Account Number, Crypto shows Wallet Address
-- [x] **Ours (Receiving Account) Section:** Bank/Crypto toggle with Bank+Account or Wallet Address — highlighted in yellow in detail views
+### Deal Form Structure
+- [x] Transaction Types: Today, Tomorrow, Spot
+- [x] Transfer Types: FX Crypto Conversion, FX Local, PDAX Withdrawal
+- [x] Bank/Crypto toggle on From/To/Ours sections
 
 ### Data
-- [x] Comprehensive currency seeding (31 fiat, 16 stablecoins, 18 crypto)
-- [x] Seeded transaction types (Today, Tomorrow, Spot)
-- [x] Seeded transfer types (FX Crypto Conversion, FX Local, PDAX Withdrawal)
-- [x] Companies and banks
+- [x] 31 fiat, 16 stablecoins, 18 crypto currencies
+- [x] Companies, banks, transaction types, transfer types
 
 ## Key API Endpoints
 - POST /api/auth/login
-- GET /api/deals (filters: status, client, currency, date_from, date_to)
-- POST /api/deals
-- GET /api/deals/{deal_id}
-- PUT /api/deals/{deal_id}/cancel (cancellation_reason required)
-- POST /api/deals/{deal_id}/upload (settlement proof)
+- GET/POST /api/deals, GET /api/deals/{deal_id}
+- GET /api/deals/export (CSV)
+- PUT /api/deals/{deal_id}/cancel
+- POST /api/deals/{deal_id}/upload
 - DELETE /api/deals/{deal_id}/proofs/{proof_id}
-- PUT /api/deals/{deal_id}/process (treasury_remarks required)
+- PUT /api/deals/{deal_id}/process
+- GET /api/audit-logs (admin only, with filtering + pagination)
 - GET /api/reference/{entity_type}
 - GET /api/dashboard/stats
 
-## DB Schema
-- **users:** id, email, name, password_hash, role, is_active
-- **deals:** id, reference_number, transaction_type, value_date, deal_date, transfer_type, client_name, from_type, from_company, from_bank, from_account_num, from_wallet_address, to_type, to_company, to_bank, to_account_num, to_wallet_address, ours_type, ours_bank, ours_account_num, ours_wallet_address, buy_currency, sell_currency, currency_amount, rate, amount, remarks, status (pending/confirmed/returned/cancelled), treasury_remarks, cancellation_reason, cancelled_at, settlement_proofs[], created_by, created_by_name, processed_by, processed_by_name, processed_at, created_at, updated_at
-- **currencies:** id, code, name, type, symbol, is_active
-- **companies/banks/transaction_types/transfer_types:** id, name, code, is_active
-
 ## Backlog / Future Enhancements
-- [ ] Extract helper components (SearchSelect, CurrSel, DatePick) into separate files
+- [ ] Extract helper components for modularity
 - [ ] Dashboard enhancements with more analytics/charts
-- [ ] Export deals to CSV/Excel or PDF deal ticket
 - [ ] Email notifications on deal status changes
-- [ ] Audit trail / activity log
 - [ ] Deal amendment workflow (edit pending deals)
+- [ ] PDF deal ticket export for printing
