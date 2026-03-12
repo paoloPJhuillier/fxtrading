@@ -221,10 +221,23 @@ async def get_me(user=Depends(get_current_user)):
 
 # --- User Management (Admin) ---
 @api_router.get("/users")
-async def list_users(user=Depends(get_current_user)):
+async def list_users(
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=100),
+    search: Optional[str] = Query(None),
+    user=Depends(get_current_user)
+):
     await require_role(user, ["admin"])
-    users = await db.users.find({}, {"_id": 0, "password_hash": 0}).to_list(1000)
-    return users
+    query = {}
+    if search:
+        query["$or"] = [
+            {"name": {"$regex": search, "$options": "i"}},
+            {"email": {"$regex": search, "$options": "i"}}
+        ]
+    total = await db.users.count_documents(query)
+    skip = (page - 1) * limit
+    users = await db.users.find(query, {"_id": 0, "password_hash": 0}).skip(skip).limit(limit).to_list(limit)
+    return {"users": users, "total": total, "page": page, "pages": (total + limit - 1) // limit if total > 0 else 1}
 
 @api_router.post("/users")
 async def create_user(req: UserCreate, user=Depends(get_current_user)):
@@ -319,6 +332,8 @@ async def list_deals(
     currency: Optional[str] = Query(None),
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=100),
     user=Depends(get_current_user)
 ):
     query = {}
@@ -334,8 +349,10 @@ async def list_deals(
         query.setdefault("deal_date", {})["$gte"] = date_from
     if date_to:
         query.setdefault("deal_date", {})["$lte"] = date_to
-    deals = await db.deals.find(query, {"_id": 0}).sort("created_at", -1).to_list(10000)
-    return deals
+    total = await db.deals.count_documents(query)
+    skip = (page - 1) * limit
+    deals = await db.deals.find(query, {"_id": 0}).sort("created_at", -1).skip(skip).limit(limit).to_list(limit)
+    return {"deals": deals, "total": total, "page": page, "pages": (total + limit - 1) // limit if total > 0 else 1}
 
 @api_router.post("/deals")
 async def create_deal(req: DealCreate, user=Depends(get_current_user)):

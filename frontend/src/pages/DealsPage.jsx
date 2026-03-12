@@ -11,20 +11,23 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Separator } from '@/components/ui/separator';
-import { Plus, FileText, Eye, Filter, X, Ban, Image as ImageIcon, Download, Upload, Trash2, RotateCcw } from 'lucide-react';
+import { Plus, FileText, Eye, Filter, X, Ban, Image as ImageIcon, Download, Upload, Trash2, RotateCcw, ChevronLeft, ChevronRight } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 
+const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || '';
 const SB = {
   pending: 'bg-yellow-100 text-yellow-800',
   confirmed: 'bg-green-100 text-green-800',
   returned: 'bg-red-100 text-red-800',
   cancelled: 'bg-slate-200 text-slate-600',
 };
+const PAGE_SIZE = 20;
 
 export default function DealsPage() {
-  const [deals, setDeals] = useState([]);
+  const [data, setData] = useState({ deals: [], total: 0, page: 1, pages: 1 });
   const [filter, setFilter] = useState({ status: 'all', client: '', currency: '', date_from: '', date_to: '' });
+  const [page, setPage] = useState(1);
   const [showFilters, setShowFilters] = useState(false);
   const [loading, setLoading] = useState(true);
   const [sel, setSel] = useState(null);
@@ -40,22 +43,24 @@ export default function DealsPage() {
     setLoading(true);
     try {
       const params = new URLSearchParams();
+      params.append('page', page);
+      params.append('limit', PAGE_SIZE);
       if (filter.status !== 'all') params.append('status', filter.status);
       if (filter.client) params.append('client', filter.client);
       if (filter.currency) params.append('currency', filter.currency);
       if (filter.date_from) params.append('date_from', filter.date_from);
       if (filter.date_to) params.append('date_to', filter.date_to);
-      const q = params.toString();
-      const res = await api.get(`/deals${q ? '?' + q : ''}`);
-      setDeals(res.data);
+      const res = await api.get(`/deals?${params.toString()}`);
+      setData(res.data);
     } catch (err) { console.error(err); }
     finally { setLoading(false); }
-  }, [filter]);
+  }, [filter, page]);
 
   useEffect(() => { fetchDeals(); }, [fetchDeals]);
 
-  const clearFilters = () => setFilter({ status: 'all', client: '', currency: '', date_from: '', date_to: '' });
+  const clearFilters = () => { setFilter({ status: 'all', client: '', currency: '', date_from: '', date_to: '' }); setPage(1); };
   const hasFilters = filter.status !== 'all' || filter.client || filter.currency || filter.date_from || filter.date_to;
+  const updateFilter = (k, v) => { setFilter(p => ({ ...p, [k]: v })); setPage(1); };
 
   const exportCSV = async () => {
     try {
@@ -82,10 +87,7 @@ export default function DealsPage() {
     try {
       await api.put(`/deals/${sel.id}/cancel`, { cancellation_reason: cancelReason });
       toast.success('Deal cancelled successfully');
-      setCancelOpen(false);
-      setCancelReason('');
-      setSel(null);
-      fetchDeals();
+      setCancelOpen(false); setCancelReason(''); setSel(null); fetchDeals();
     } catch (err) { toast.error(err.response?.data?.detail || 'Cancel failed'); }
     finally { setCancelling(false); }
   };
@@ -122,38 +124,9 @@ export default function DealsPage() {
     try {
       await api.put(`/deals/${sel.id}/resubmit`);
       toast.success('Deal resubmitted for review');
-      setSel(null);
-      fetchDeals();
+      setSel(null); fetchDeals();
     } catch (err) { toast.error(err.response?.data?.detail || 'Resubmit failed'); }
     finally { setResubmitting(false); }
-  };
-
-  const AccountInfo = ({ deal, prefix, label }) => {
-    const type = deal[`${prefix}_type`] || 'bank';
-    return (
-      <div>
-        <p className="text-[10px] text-slate-400 uppercase tracking-wider">{label}</p>
-        {type === 'crypto' ? (
-          <p className="text-sm font-medium">{deal[`${prefix}_company`]} / <span className="font-mono text-xs">{deal[`${prefix}_wallet_address`] || '-'}</span></p>
-        ) : (
-          <p className="text-sm font-medium">{deal[`${prefix}_company`] || ''} / {deal[`${prefix}_bank`] || ''} <span className="font-mono text-xs">({deal[`${prefix}_account_num`] || '-'})</span></p>
-        )}
-      </div>
-    );
-  };
-
-  const OursInfo = ({ deal }) => {
-    const type = deal.ours_type || 'bank';
-    return (
-      <div className="bg-yellow-50 border border-yellow-200 p-3 rounded-md">
-        <p className="text-[10px] text-yellow-700 uppercase tracking-wider font-semibold mb-1">Ours (Receiving Account)</p>
-        {type === 'crypto' ? (
-          <p className="text-sm font-medium font-mono">{deal.ours_wallet_address || '-'}</p>
-        ) : (
-          <p className="text-sm font-medium">{deal.ours_bank || '-'} <span className="font-mono text-xs">({deal.ours_account_num || '-'})</span></p>
-        )}
-      </div>
-    );
   };
 
   return (
@@ -161,7 +134,7 @@ export default function DealsPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
           <h1 className="text-3xl font-bold text-[#08263e]" style={{ fontFamily: 'Chivo' }}>My Deals</h1>
-          <p className="text-sm text-slate-500 mt-1">{deals.length} deal{deals.length !== 1 ? 's' : ''}</p>
+          <p className="text-sm text-slate-500 mt-1">{data.total} deal{data.total !== 1 ? 's' : ''}</p>
         </div>
         <div className="flex gap-2">
           <Button variant={showFilters ? 'default' : 'outline'} size="sm" onClick={() => setShowFilters(!showFilters)} data-testid="toggle-filters-btn" className={showFilters ? 'bg-[#518dca]' : ''}>
@@ -181,22 +154,22 @@ export default function DealsPage() {
           <CardContent className="py-4">
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
               <div className="space-y-1"><Label className="text-xs">Status</Label>
-                <Select value={filter.status} onValueChange={v => setFilter(p => ({ ...p, status: v }))}>
+                <Select value={filter.status} onValueChange={v => updateFilter('status', v)}>
                   <SelectTrigger className="h-8 text-xs" data-testid="filter-status"><SelectValue /></SelectTrigger>
                   <SelectContent><SelectItem value="all">All</SelectItem><SelectItem value="pending">Pending</SelectItem><SelectItem value="confirmed">Confirmed</SelectItem><SelectItem value="returned">Returned</SelectItem><SelectItem value="cancelled">Cancelled</SelectItem></SelectContent>
                 </Select>
               </div>
               <div className="space-y-1"><Label className="text-xs">Client</Label>
-                <Input className="h-8 text-xs" placeholder="Search client..." value={filter.client} onChange={e => setFilter(p => ({ ...p, client: e.target.value }))} data-testid="filter-client" />
+                <Input className="h-8 text-xs" placeholder="Search client..." value={filter.client} onChange={e => updateFilter('client', e.target.value)} data-testid="filter-client" />
               </div>
               <div className="space-y-1"><Label className="text-xs">Currency</Label>
-                <Input className="h-8 text-xs" placeholder="e.g. USD" value={filter.currency} onChange={e => setFilter(p => ({ ...p, currency: e.target.value.toUpperCase() }))} data-testid="filter-currency" />
+                <Input className="h-8 text-xs" placeholder="e.g. USD" value={filter.currency} onChange={e => updateFilter('currency', e.target.value.toUpperCase())} data-testid="filter-currency" />
               </div>
               <div className="space-y-1"><Label className="text-xs">Date From</Label>
-                <Input type="date" className="h-8 text-xs" value={filter.date_from} onChange={e => setFilter(p => ({ ...p, date_from: e.target.value }))} data-testid="filter-date-from" />
+                <Input type="date" className="h-8 text-xs" value={filter.date_from} onChange={e => updateFilter('date_from', e.target.value)} data-testid="filter-date-from" />
               </div>
               <div className="space-y-1"><Label className="text-xs">Date To</Label>
-                <Input type="date" className="h-8 text-xs" value={filter.date_to} onChange={e => setFilter(p => ({ ...p, date_to: e.target.value }))} data-testid="filter-date-to" />
+                <Input type="date" className="h-8 text-xs" value={filter.date_to} onChange={e => updateFilter('date_to', e.target.value)} data-testid="filter-date-to" />
               </div>
             </div>
             {hasFilters && <Button variant="ghost" size="sm" className="mt-3 text-xs text-slate-500" onClick={clearFilters} data-testid="clear-filters-btn"><X className="h-3 w-3 mr-1" /> Clear Filters</Button>}
@@ -208,7 +181,7 @@ export default function DealsPage() {
         <CardContent className="p-0">
           {loading ? (
             <div className="flex items-center justify-center h-32"><div className="animate-spin h-6 w-6 border-4 border-[#518dca] border-t-transparent rounded-full" /></div>
-          ) : deals.length === 0 ? (
+          ) : data.deals.length === 0 ? (
             <div className="text-center py-16">
               <FileText className="h-12 w-12 text-slate-300 mx-auto mb-3" />
               <p className="text-slate-500">No deals found</p>
@@ -218,19 +191,14 @@ export default function DealsPage() {
             <Table>
               <TableHeader>
                 <TableRow className="bg-slate-50">
-                  <TableHead>Reference</TableHead>
-                  <TableHead>Client</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Pair</TableHead>
-                  <TableHead className="text-right">Amount</TableHead>
-                  <TableHead className="text-right">Rate</TableHead>
-                  <TableHead>Deal Date</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Action</TableHead>
+                  <TableHead>Reference</TableHead><TableHead>Client</TableHead><TableHead>Type</TableHead>
+                  <TableHead>Pair</TableHead><TableHead className="text-right">Amount</TableHead>
+                  <TableHead className="text-right">Rate</TableHead><TableHead>Deal Date</TableHead>
+                  <TableHead>Status</TableHead><TableHead>Action</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {deals.map(deal => (
+                {data.deals.map(deal => (
                   <TableRow key={deal.id} data-testid={`deal-row-${deal.id}`}>
                     <TableCell className="font-mono text-xs font-medium text-[#08263e]">{deal.reference_number}</TableCell>
                     <TableCell className="text-sm">{deal.client_name || '-'}</TableCell>
@@ -252,6 +220,20 @@ export default function DealsPage() {
           )}
         </CardContent>
       </Card>
+
+      {data.pages > 1 && (
+        <div className="flex items-center justify-between mt-4">
+          <p className="text-xs text-slate-400">Page {data.page} of {data.pages} ({data.total} deals)</p>
+          <div className="flex gap-2">
+            <Button size="sm" variant="outline" disabled={page <= 1} onClick={() => setPage(p => p - 1)} data-testid="deals-prev-page">
+              <ChevronLeft className="h-3.5 w-3.5 mr-1" /> Previous
+            </Button>
+            <Button size="sm" variant="outline" disabled={page >= data.pages} onClick={() => setPage(p => p + 1)} data-testid="deals-next-page">
+              Next <ChevronRight className="h-3.5 w-3.5 ml-1" />
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Deal Detail Dialog */}
       <Dialog open={!!sel && !cancelOpen} onOpenChange={o => { if (!o) setSel(null); }}>
@@ -292,21 +274,18 @@ export default function DealsPage() {
                 <DI label={`Currency Amount (${sel.buy_currency})`} val={Number(sel.currency_amount).toLocaleString()} mono />
                 <DI label="Exchange Rate" val={sel.rate} mono />
                 <DI label={`Converted Amount (${sel.sell_currency})`} val={Number(sel.amount).toLocaleString()} mono />
-                <AccountInfo deal={sel} prefix="from" label="From" />
-                <AccountInfo deal={sel} prefix="to" label="To" />
-                <DI label="Status" val={sel.status} />
+                <AcctInfo deal={sel} prefix="from" label="From" />
+                <AcctInfo deal={sel} prefix="to" label="To" />
                 <DI label="Created By" val={sel.created_by_name} />
                 {sel.processed_by_name && <DI label="Processed By" val={sel.processed_by_name} />}
-                {sel.processed_at && <DI label="Processed At" val={format(new Date(sel.processed_at), 'dd MMM yyyy HH:mm')} />}
               </div>
               <div className="bg-slate-50 p-3 rounded-md text-center font-mono text-sm font-medium text-[#08263e]">
                 {Number(sel.currency_amount).toLocaleString()} {sel.buy_currency} x {sel.rate} = {Number(sel.amount).toLocaleString()} {sel.sell_currency}
               </div>
               <OursInfo deal={sel} />
               {sel.remarks && (<div className="bg-slate-50 p-3 rounded-md"><p className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Remarks</p><p className="text-sm">{sel.remarks}</p></div>)}
-              {sel.treasury_remarks && (<div className="bg-blue-50 p-3 rounded-md"><p className="text-[10px] text-blue-400 uppercase tracking-wider mb-1">Treasury Remarks</p><p className="text-sm">{sel.treasury_remarks}</p></div>)}
+              {sel.status !== 'returned' && sel.treasury_remarks && (<div className="bg-blue-50 p-3 rounded-md"><p className="text-[10px] text-blue-400 uppercase tracking-wider mb-1">Treasury Remarks</p><p className="text-sm">{sel.treasury_remarks}</p></div>)}
               {sel.cancellation_reason && (<div className="bg-red-50 border border-red-200 p-3 rounded-md"><p className="text-[10px] text-red-400 uppercase tracking-wider mb-1">Cancellation Reason</p><p className="text-sm text-red-700">{sel.cancellation_reason}</p></div>)}
-
               <Separator />
               <div>
                 <div className="flex items-center justify-between mb-3">
@@ -324,9 +303,9 @@ export default function DealsPage() {
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                     {sel.settlement_proofs.map(p => (
                       <div key={p.id} className="relative group border rounded-lg overflow-hidden">
-                        <img src={`${process.env.REACT_APP_BACKEND_URL}/api/files/${p.path}`} alt={p.filename} className="w-full h-28 object-cover" />
+                        <img src={`${BACKEND_URL}/api/files/${p.path}`} alt={p.filename} className="w-full h-28 object-cover" />
                         <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                          <a href={`${process.env.REACT_APP_BACKEND_URL}/api/files/${p.path}`} target="_blank" rel="noopener noreferrer" className="text-white"><Eye className="h-4 w-4" /></a>
+                          <a href={`${BACKEND_URL}/api/files/${p.path}`} target="_blank" rel="noopener noreferrer" className="text-white"><Eye className="h-4 w-4" /></a>
                           {(sel.status === 'pending' || sel.status === 'returned') && (
                             <button onClick={() => deleteProof(p.id)} className="text-white hover:text-red-300"><Trash2 className="h-4 w-4" /></button>
                           )}
@@ -355,13 +334,10 @@ export default function DealsPage() {
               <Ban className="h-5 w-5" /> Cancel / Recall Deal
             </DialogTitle>
           </DialogHeader>
-          <p className="text-sm text-slate-500">
-            You are about to cancel deal <span className="font-mono font-medium">{sel?.reference_number}</span>. This action cannot be undone.
-          </p>
+          <p className="text-sm text-slate-500">You are about to cancel deal <span className="font-mono font-medium">{sel?.reference_number}</span>. This action cannot be undone.</p>
           <div className="space-y-1.5">
             <Label className="text-xs">Cancellation Reason <span className="text-red-500">*</span></Label>
-            <Textarea value={cancelReason} onChange={e => setCancelReason(e.target.value)} placeholder="Please explain the reason for cancellation (e.g., client revised transaction amount, duplicate entry, etc.)" rows={4} data-testid="cancel-reason-input" />
-            <p className="text-[10px] text-slate-400">This reason will be visible to the settlements / treasury team.</p>
+            <Textarea value={cancelReason} onChange={e => setCancelReason(e.target.value)} placeholder="Please explain the reason for cancellation..." rows={4} data-testid="cancel-reason-input" />
           </div>
           <DialogFooter className="gap-2">
             <Button variant="outline" onClick={() => { setCancelOpen(false); setCancelReason(''); }} data-testid="cancel-dialog-back-btn">Go Back</Button>
@@ -377,4 +353,32 @@ export default function DealsPage() {
 
 function DI({ label, val, mono }) {
   return (<div><p className="text-[10px] text-slate-400 uppercase tracking-wider">{label}</p><p className={`text-sm font-medium ${mono ? 'font-mono' : ''}`}>{val || '-'}</p></div>);
+}
+
+function AcctInfo({ deal, prefix, label }) {
+  const type = deal[`${prefix}_type`] || 'bank';
+  return (
+    <div>
+      <p className="text-[10px] text-slate-400 uppercase tracking-wider">{label}</p>
+      {type === 'crypto' ? (
+        <p className="text-sm font-medium">{deal[`${prefix}_company`]} / <span className="font-mono text-xs">{deal[`${prefix}_wallet_address`] || '-'}</span></p>
+      ) : (
+        <p className="text-sm font-medium">{deal[`${prefix}_company`] || ''} / {deal[`${prefix}_bank`] || ''} <span className="font-mono text-xs">({deal[`${prefix}_account_num`] || '-'})</span></p>
+      )}
+    </div>
+  );
+}
+
+function OursInfo({ deal }) {
+  const type = deal.ours_type || 'bank';
+  return (
+    <div className="bg-yellow-50 border border-yellow-200 p-3 rounded-md">
+      <p className="text-[10px] text-yellow-700 uppercase tracking-wider font-semibold mb-1">Ours (Receiving Account)</p>
+      {type === 'crypto' ? (
+        <p className="text-sm font-medium font-mono">{deal.ours_wallet_address || '-'}</p>
+      ) : (
+        <p className="text-sm font-medium">{deal.ours_bank || '-'} <span className="font-mono text-xs">({deal.ours_account_num || '-'})</span></p>
+      )}
+    </div>
+  );
 }

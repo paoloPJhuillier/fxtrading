@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Plus, Pencil, Trash2 } from 'lucide-react';
+import { Plus, Pencil, Trash2, ChevronLeft, ChevronRight, Search } from 'lucide-react';
 import { toast } from 'sonner';
 
 const ROLE_BADGE = {
@@ -16,19 +16,29 @@ const ROLE_BADGE = {
   trader: 'bg-blue-100 text-blue-800',
   treasury: 'bg-teal-100 text-teal-800',
 };
+const PAGE_SIZE = 20;
 
 export default function UsersPage() {
-  const [users, setUsers] = useState([]);
+  const [data, setData] = useState({ users: [], total: 0, page: 1, pages: 1 });
+  const [page, setPage] = useState(1);
+  const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const [edit, setEdit] = useState(null);
   const [form, setForm] = useState({ name: '', email: '', password: '', role: 'trader' });
 
   const load = useCallback(async () => {
-    try { const r = await api.get('/users'); setUsers(r.data); }
-    catch (e) { console.error(e); }
+    setLoading(true);
+    try {
+      const params = new URLSearchParams();
+      params.append('page', page);
+      params.append('limit', PAGE_SIZE);
+      if (search) params.append('search', search);
+      const r = await api.get(`/users?${params.toString()}`);
+      setData(r.data);
+    } catch (e) { console.error(e); }
     finally { setLoading(false); }
-  }, []);
+  }, [page, search]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -62,11 +72,17 @@ export default function UsersPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
         <div>
           <h1 className="text-3xl font-bold text-[#08263e]" style={{ fontFamily: 'Chivo' }}>User Management</h1>
-          <p className="text-sm text-slate-500 mt-1">{users.length} user{users.length !== 1 ? 's' : ''}</p>
+          <p className="text-sm text-slate-500 mt-1">{data.total} user{data.total !== 1 ? 's' : ''}</p>
         </div>
-        <Button className="bg-[#08263e] hover:bg-[#08263e]/90" onClick={openNew} data-testid="add-user-btn">
-          <Plus className="h-4 w-4 mr-2" /> Add User
-        </Button>
+        <div className="flex gap-2">
+          <div className="relative">
+            <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-slate-400" />
+            <Input className="h-9 pl-8 w-48 text-xs" placeholder="Search users..." value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} data-testid="search-users-input" />
+          </div>
+          <Button className="bg-[#08263e] hover:bg-[#08263e]/90" onClick={openNew} data-testid="add-user-btn">
+            <Plus className="h-4 w-4 mr-2" /> Add User
+          </Button>
+        </div>
       </div>
 
       <Card>
@@ -85,7 +101,7 @@ export default function UsersPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {users.map(u => (
+                {data.users.map(u => (
                   <TableRow key={u.id} data-testid={`user-row-${u.id}`}>
                     <TableCell className="font-medium text-sm">{u.name}</TableCell>
                     <TableCell className="text-sm text-slate-500">{u.email}</TableCell>
@@ -110,6 +126,20 @@ export default function UsersPage() {
           )}
         </CardContent>
       </Card>
+
+      {data.pages > 1 && (
+        <div className="flex items-center justify-between mt-4">
+          <p className="text-xs text-slate-400">Page {data.page} of {data.pages} ({data.total} users)</p>
+          <div className="flex gap-2">
+            <Button size="sm" variant="outline" disabled={page <= 1} onClick={() => setPage(p => p - 1)} data-testid="users-prev-page">
+              <ChevronLeft className="h-3.5 w-3.5 mr-1" /> Previous
+            </Button>
+            <Button size="sm" variant="outline" disabled={page >= data.pages} onClick={() => setPage(p => p + 1)} data-testid="users-next-page">
+              Next <ChevronRight className="h-3.5 w-3.5 ml-1" />
+            </Button>
+          </div>
+        </div>
+      )}
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent data-testid="user-dialog">

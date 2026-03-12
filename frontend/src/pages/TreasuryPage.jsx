@@ -10,45 +10,48 @@ import { Separator } from '@/components/ui/separator';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { CheckCircle, XCircle, Eye, Filter, X, Image as ImageIcon, AlertTriangle, Upload, Trash2 } from 'lucide-react';
+import { CheckCircle, XCircle, Eye, Filter, X, Image as ImageIcon, AlertTriangle, Upload, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || '';
-
 const SB = {
   pending: 'bg-yellow-100 text-yellow-800',
   confirmed: 'bg-green-100 text-green-800',
   returned: 'bg-red-100 text-red-800',
   cancelled: 'bg-slate-200 text-slate-600',
 };
+const PAGE_SIZE = 20;
 
 export default function TreasuryPage() {
-  const [deals, setDeals] = useState([]);
+  const [data, setData] = useState({ deals: [], total: 0, page: 1, pages: 1 });
   const [sel, setSel] = useState(null);
   const [remarks, setRemarks] = useState('');
   const [processing, setProcessing] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [confirmAction, setConfirmAction] = useState(null);
   const [tab, setTab] = useState('pending');
+  const [page, setPage] = useState(1);
   const [showFilters, setShowFilters] = useState(false);
   const [filter, setFilter] = useState({ client: '', currency: '', date_from: '', date_to: '' });
+  const [confirmAction, setConfirmAction] = useState(null);
   const [uploading, setUploading] = useState(false);
   const fileRef = useRef(null);
 
   const load = useCallback(async () => {
+    setLoading(true);
     try {
       const params = new URLSearchParams();
+      params.append('page', page);
+      params.append('limit', PAGE_SIZE);
       if (filter.client) params.append('client', filter.client);
       if (filter.currency) params.append('currency', filter.currency);
       if (filter.date_from) params.append('date_from', filter.date_from);
       if (filter.date_to) params.append('date_to', filter.date_to);
-      const q = params.toString();
-      const r = await api.get(`/deals${q ? '?' + q : ''}`);
-      setDeals(r.data);
+      const r = await api.get(`/deals?${params.toString()}`);
+      setData(r.data);
     } catch (e) { console.error(e); }
     finally { setLoading(false); }
-  }, [filter]);
+  }, [filter, page]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -68,8 +71,9 @@ export default function TreasuryPage() {
     finally { setProcessing(false); setConfirmAction(null); }
   };
 
-  const clearFilters = () => setFilter({ client: '', currency: '', date_from: '', date_to: '' });
+  const clearFilters = () => { setFilter({ client: '', currency: '', date_from: '', date_to: '' }); setPage(1); };
   const hasFilters = filter.client || filter.currency || filter.date_from || filter.date_to;
+  const updateFilter = (k, v) => { setFilter(p => ({ ...p, [k]: v })); setPage(1); };
 
   const uploadProof = async (e) => {
     if (!sel || !e.target.files?.length) return;
@@ -97,36 +101,39 @@ export default function TreasuryPage() {
     } catch (err) { toast.error('Delete failed'); }
   };
 
-  const pending = deals.filter(d => d.status === 'pending');
-  const done = deals.filter(d => d.status !== 'pending');
+  const pending = data.deals.filter(d => d.status === 'pending');
+  const done = data.deals.filter(d => d.status !== 'pending');
 
-  const AccountInfo = ({ deal, prefix, label }) => {
-    const type = deal[`${prefix}_type`] || 'bank';
-    return (
-      <div>
-        <p className="text-[10px] text-slate-400 uppercase tracking-wider">{label}</p>
-        {type === 'crypto' ? (
-          <p className="text-sm font-medium">{deal[`${prefix}_company`]} / <span className="font-mono text-xs">{deal[`${prefix}_wallet_address`] || '-'}</span></p>
-        ) : (
-          <p className="text-sm font-medium">{deal[`${prefix}_company`] || ''} / {deal[`${prefix}_bank`] || ''} <span className="font-mono text-xs">({deal[`${prefix}_account_num`] || '-'})</span></p>
-        )}
-      </div>
-    );
-  };
-
-  const OursInfo = ({ deal }) => {
-    const type = deal.ours_type || 'bank';
-    return (
-      <div className="bg-yellow-50 border border-yellow-200 p-3 rounded-md">
-        <p className="text-[10px] text-yellow-700 uppercase tracking-wider font-semibold mb-1">Ours (Receiving Account)</p>
-        {type === 'crypto' ? (
-          <p className="text-sm font-medium font-mono">{deal.ours_wallet_address || '-'}</p>
-        ) : (
-          <p className="text-sm font-medium">{deal.ours_bank || '-'} <span className="font-mono text-xs">({deal.ours_account_num || '-'})</span></p>
-        )}
-      </div>
-    );
-  };
+  const DealTable = ({ deals, showActions }) => (
+    deals.length === 0 ? <p className="text-center py-16 text-slate-400">No deals</p> :
+    <Table>
+      <TableHeader><TableRow className="bg-slate-50">
+        <TableHead>Reference</TableHead><TableHead>Client</TableHead><TableHead>Trader</TableHead>
+        <TableHead>Type</TableHead><TableHead>Pair</TableHead><TableHead className="text-right">Amount</TableHead>
+        <TableHead className="text-right">Rate</TableHead><TableHead>Deal Date</TableHead>
+        {!showActions && <TableHead>Status</TableHead>}
+        <TableHead>Action</TableHead>
+      </TableRow></TableHeader>
+      <TableBody>{deals.map(d => (
+        <TableRow key={d.id} data-testid={`${showActions ? 'pending' : 'processed'}-deal-${d.id}`}>
+          <TableCell className="font-mono text-xs font-medium">{d.reference_number}</TableCell>
+          <TableCell className="text-sm">{d.client_name || '-'}</TableCell>
+          <TableCell className="text-sm">{d.created_by_name}</TableCell>
+          <TableCell className="text-sm">{d.transaction_type}</TableCell>
+          <TableCell className="font-mono text-xs">{d.buy_currency}/{d.sell_currency}</TableCell>
+          <TableCell className="text-right font-mono text-xs">{Number(d.amount).toLocaleString()}</TableCell>
+          <TableCell className="text-right font-mono text-xs">{d.rate}</TableCell>
+          <TableCell className="text-xs">{format(new Date(d.deal_date + 'T00:00:00'), 'dd MMM yyyy')}</TableCell>
+          {!showActions && <TableCell><Badge className={SB[d.status]}>{d.status}</Badge></TableCell>}
+          <TableCell>
+            <Button size="sm" variant="outline" onClick={() => { setSel(d); setRemarks(''); }} data-testid={`review-deal-${d.id}`}>
+              <Eye className="h-3 w-3 mr-1" /> {showActions ? 'Review' : 'View'}
+            </Button>
+          </TableCell>
+        </TableRow>
+      ))}</TableBody>
+    </Table>
+  );
 
   return (
     <div data-testid="treasury-page">
@@ -145,16 +152,16 @@ export default function TreasuryPage() {
           <CardContent className="py-4">
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <div className="space-y-1"><Label className="text-xs">Client</Label>
-                <Input className="h-8 text-xs" placeholder="Search client..." value={filter.client} onChange={e => setFilter(p => ({ ...p, client: e.target.value }))} data-testid="treas-filter-client" />
+                <Input className="h-8 text-xs" placeholder="Search client..." value={filter.client} onChange={e => updateFilter('client', e.target.value)} data-testid="treas-filter-client" />
               </div>
               <div className="space-y-1"><Label className="text-xs">Currency</Label>
-                <Input className="h-8 text-xs" placeholder="e.g. USD" value={filter.currency} onChange={e => setFilter(p => ({ ...p, currency: e.target.value.toUpperCase() }))} data-testid="treas-filter-currency" />
+                <Input className="h-8 text-xs" placeholder="e.g. USD" value={filter.currency} onChange={e => updateFilter('currency', e.target.value.toUpperCase())} data-testid="treas-filter-currency" />
               </div>
               <div className="space-y-1"><Label className="text-xs">Date From</Label>
-                <Input type="date" className="h-8 text-xs" value={filter.date_from} onChange={e => setFilter(p => ({ ...p, date_from: e.target.value }))} data-testid="treas-filter-date-from" />
+                <Input type="date" className="h-8 text-xs" value={filter.date_from} onChange={e => updateFilter('date_from', e.target.value)} data-testid="treas-filter-date-from" />
               </div>
               <div className="space-y-1"><Label className="text-xs">Date To</Label>
-                <Input type="date" className="h-8 text-xs" value={filter.date_to} onChange={e => setFilter(p => ({ ...p, date_to: e.target.value }))} data-testid="treas-filter-date-to" />
+                <Input type="date" className="h-8 text-xs" value={filter.date_to} onChange={e => updateFilter('date_to', e.target.value)} data-testid="treas-filter-date-to" />
               </div>
             </div>
             {hasFilters && <Button variant="ghost" size="sm" className="mt-3 text-xs text-slate-500" onClick={clearFilters} data-testid="treas-clear-filters"><X className="h-3 w-3 mr-1" /> Clear Filters</Button>}
@@ -170,52 +177,32 @@ export default function TreasuryPage() {
         <TabsContent value="pending" className="mt-4">
           <Card><CardContent className="p-0">
             {loading ? <div className="flex items-center justify-center h-32"><div className="animate-spin h-6 w-6 border-4 border-[#518dca] border-t-transparent rounded-full" /></div>
-            : pending.length === 0 ? <p className="text-center py-16 text-slate-400">No pending deals</p>
-            : <Table>
-                <TableHeader><TableRow className="bg-slate-50">
-                  <TableHead>Reference</TableHead><TableHead>Client</TableHead><TableHead>Trader</TableHead><TableHead>Type</TableHead><TableHead>Pair</TableHead><TableHead className="text-right">Amount</TableHead><TableHead className="text-right">Rate</TableHead><TableHead>Deal Date</TableHead><TableHead>Action</TableHead>
-                </TableRow></TableHeader>
-                <TableBody>{pending.map(d => (
-                  <TableRow key={d.id} data-testid={`pending-deal-${d.id}`}>
-                    <TableCell className="font-mono text-xs font-medium">{d.reference_number}</TableCell>
-                    <TableCell className="text-sm">{d.client_name || '-'}</TableCell>
-                    <TableCell className="text-sm">{d.created_by_name}</TableCell>
-                    <TableCell className="text-sm">{d.transaction_type}</TableCell>
-                    <TableCell className="font-mono text-xs">{d.buy_currency}/{d.sell_currency}</TableCell>
-                    <TableCell className="text-right font-mono text-xs">{Number(d.amount).toLocaleString()}</TableCell>
-                    <TableCell className="text-right font-mono text-xs">{d.rate}</TableCell>
-                    <TableCell className="text-xs">{format(new Date(d.deal_date + 'T00:00:00'), 'dd MMM yyyy')}</TableCell>
-                    <TableCell><Button size="sm" variant="outline" onClick={() => { setSel(d); setRemarks(''); }} data-testid={`review-deal-${d.id}`}><Eye className="h-3 w-3 mr-1" /> Review</Button></TableCell>
-                  </TableRow>
-                ))}</TableBody>
-              </Table>}
+            : <DealTable deals={pending} showActions />}
           </CardContent></Card>
         </TabsContent>
         <TabsContent value="processed" className="mt-4">
           <Card><CardContent className="p-0">
-            {done.length === 0 ? <p className="text-center py-16 text-slate-400">No processed deals</p>
-            : <Table>
-                <TableHeader><TableRow className="bg-slate-50">
-                  <TableHead>Reference</TableHead><TableHead>Client</TableHead><TableHead>Trader</TableHead><TableHead>Pair</TableHead><TableHead className="text-right">Amount</TableHead><TableHead>Status</TableHead><TableHead>Processed By</TableHead><TableHead>Processed At</TableHead>
-                </TableRow></TableHeader>
-                <TableBody>{done.map(d => (
-                  <TableRow key={d.id}>
-                    <TableCell className="font-mono text-xs">{d.reference_number}</TableCell>
-                    <TableCell className="text-sm">{d.client_name || '-'}</TableCell>
-                    <TableCell className="text-sm">{d.created_by_name}</TableCell>
-                    <TableCell className="font-mono text-xs">{d.buy_currency}/{d.sell_currency}</TableCell>
-                    <TableCell className="text-right font-mono text-xs">{Number(d.amount).toLocaleString()}</TableCell>
-                    <TableCell><Badge className={SB[d.status]}>{d.status}</Badge></TableCell>
-                    <TableCell className="text-sm">{d.processed_by_name || '-'}</TableCell>
-                    <TableCell className="text-xs">{d.processed_at ? format(new Date(d.processed_at), 'dd MMM yyyy HH:mm') : '-'}</TableCell>
-                  </TableRow>
-                ))}</TableBody>
-              </Table>}
+            <DealTable deals={done} showActions={false} />
           </CardContent></Card>
         </TabsContent>
       </Tabs>
 
-      <Dialog open={!!sel} onOpenChange={o => !o && setSel(null)}>
+      {data.pages > 1 && (
+        <div className="flex items-center justify-between mt-4">
+          <p className="text-xs text-slate-400">Page {data.page} of {data.pages} ({data.total} deals)</p>
+          <div className="flex gap-2">
+            <Button size="sm" variant="outline" disabled={page <= 1} onClick={() => setPage(p => p - 1)} data-testid="treasury-prev-page">
+              <ChevronLeft className="h-3.5 w-3.5 mr-1" /> Previous
+            </Button>
+            <Button size="sm" variant="outline" disabled={page >= data.pages} onClick={() => setPage(p => p + 1)} data-testid="treasury-next-page">
+              Next <ChevronRight className="h-3.5 w-3.5 ml-1" />
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Review Deal Dialog */}
+      <Dialog open={!!sel && !confirmAction} onOpenChange={o => !o && setSel(null)}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" data-testid="process-deal-dialog">
           <DialogHeader><DialogTitle style={{ fontFamily: 'Chivo' }} className="text-[#08263e]">Review Deal - {sel?.reference_number}</DialogTitle></DialogHeader>
           {sel && (
@@ -232,8 +219,8 @@ export default function TreasuryPage() {
                 <Info label="Rate" val={sel.rate} mono />
                 <Info label="Deal Date" val={format(new Date(sel.deal_date + 'T00:00:00'), 'dd MMM yyyy')} />
                 <Info label="Value Date" val={format(new Date(sel.value_date + 'T00:00:00'), 'dd MMM yyyy')} />
-                <AccountInfo deal={sel} prefix="from" label="From" />
-                <AccountInfo deal={sel} prefix="to" label="To" />
+                <AcctInfo deal={sel} prefix="from" label="From" />
+                <AcctInfo deal={sel} prefix="to" label="To" />
                 <Info label="Trader" val={sel.created_by_name} />
               </div>
               <OursInfo deal={sel} />
@@ -277,7 +264,7 @@ export default function TreasuryPage() {
                   <Separator />
                   <div className="space-y-1.5">
                     <Label className="text-xs">Treasury Remarks <span className="text-red-500">*</span></Label>
-                    <Textarea value={remarks} onChange={e => setRemarks(e.target.value)} placeholder="Add your remarks (required)..." rows={3} data-testid="treasury-remarks-input" className={!remarks.trim() ? '' : ''} />
+                    <Textarea value={remarks} onChange={e => setRemarks(e.target.value)} placeholder="Add your remarks (required)..." rows={3} data-testid="treasury-remarks-input" />
                   </div>
                 </>
               )}
@@ -291,9 +278,7 @@ export default function TreasuryPage() {
             </DialogFooter>
           )}
           {sel?.status !== 'pending' && (
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setSel(null)}>Close</Button>
-            </DialogFooter>
+            <DialogFooter><Button variant="outline" onClick={() => setSel(null)}>Close</Button></DialogFooter>
           )}
         </DialogContent>
       </Dialog>
@@ -308,7 +293,7 @@ export default function TreasuryPage() {
             </DialogTitle>
           </DialogHeader>
           <p className="text-sm text-slate-500">
-            Are you sure you want to <strong>{confirmAction === 'confirmed' ? 'confirm' : 'return'}</strong> deal <span className="font-mono font-medium">{sel?.reference_number}</span>? This action cannot be undone.
+            Are you sure you want to <strong>{confirmAction === 'confirmed' ? 'confirm' : 'return'}</strong> deal <span className="font-mono font-medium">{sel?.reference_number}</span>?
           </p>
           <div className="bg-slate-50 p-3 rounded-md">
             <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Your Remarks</p>
@@ -332,4 +317,32 @@ export default function TreasuryPage() {
 
 function Info({ label, val, mono }) {
   return (<div><p className="text-[10px] text-slate-400 uppercase tracking-wider">{label}</p><p className={`text-sm font-medium ${mono ? 'font-mono' : ''}`}>{val || '-'}</p></div>);
+}
+
+function AcctInfo({ deal, prefix, label }) {
+  const type = deal[`${prefix}_type`] || 'bank';
+  return (
+    <div>
+      <p className="text-[10px] text-slate-400 uppercase tracking-wider">{label}</p>
+      {type === 'crypto' ? (
+        <p className="text-sm font-medium">{deal[`${prefix}_company`]} / <span className="font-mono text-xs">{deal[`${prefix}_wallet_address`] || '-'}</span></p>
+      ) : (
+        <p className="text-sm font-medium">{deal[`${prefix}_company`] || ''} / {deal[`${prefix}_bank`] || ''} <span className="font-mono text-xs">({deal[`${prefix}_account_num`] || '-'})</span></p>
+      )}
+    </div>
+  );
+}
+
+function OursInfo({ deal }) {
+  const type = deal.ours_type || 'bank';
+  return (
+    <div className="bg-yellow-50 border border-yellow-200 p-3 rounded-md">
+      <p className="text-[10px] text-yellow-700 uppercase tracking-wider font-semibold mb-1">Ours (Receiving Account)</p>
+      {type === 'crypto' ? (
+        <p className="text-sm font-medium font-mono">{deal.ours_wallet_address || '-'}</p>
+      ) : (
+        <p className="text-sm font-medium">{deal.ours_bank || '-'} <span className="font-mono text-xs">({deal.ours_account_num || '-'})</span></p>
+      )}
+    </div>
+  );
 }
