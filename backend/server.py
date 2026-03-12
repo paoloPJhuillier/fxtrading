@@ -457,6 +457,29 @@ async def cancel_deal(deal_id: str, req: DealCancel, user=Depends(get_current_us
     await log_audit("deal_cancelled", user, "deal", deal_id, deal.get("reference_number", ""), f"Deal cancelled — {req.cancellation_reason}")
     return updated
 
+@api_router.put("/deals/{deal_id}/resubmit")
+async def resubmit_deal(deal_id: str, user=Depends(get_current_user)):
+    await require_role(user, ["trader"])
+    deal = await db.deals.find_one({"id": deal_id}, {"_id": 0})
+    if not deal:
+        raise HTTPException(status_code=404, detail="Deal not found")
+    if deal["created_by"] != user["id"]:
+        raise HTTPException(status_code=403, detail="You can only resubmit your own deals")
+    if deal["status"] != "returned":
+        raise HTTPException(status_code=400, detail="Only returned deals can be resubmitted")
+    update = {
+        "status": "pending",
+        "treasury_remarks": "",
+        "processed_by": None,
+        "processed_by_name": None,
+        "processed_at": None,
+        "updated_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.deals.update_one({"id": deal_id}, {"$set": update})
+    updated = await db.deals.find_one({"id": deal_id}, {"_id": 0})
+    await log_audit("deal_resubmitted", user, "deal", deal_id, deal.get("reference_number", ""), f"Deal resubmitted after return")
+    return updated
+
 
 # --- Reference Data ---
 COLLECTION_MAP = {

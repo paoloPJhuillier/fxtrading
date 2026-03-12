@@ -1,0 +1,103 @@
+{
+  "summary": "Complete testing of Return-Resubmit workflow for FX Trading Tracker. All 16 backend API tests passed (100%). Frontend UI tests verified all features: returned badge, alert box with treasury remarks, Resubmit button, Upload Proof visibility rules. Fixed a minor frontend bug in TreasuryPage.jsx where process.env was undefined in some contexts.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "fixed_bugs": [
+      {
+        "component": "TreasuryPage.jsx",
+        "issue": "Runtime error: Cannot read properties of undefined (reading 'REACT_APP_BACKEND_URL') when viewing deal details with settlement proofs",
+        "fix": "Changed direct process.env.REACT_APP_BACKEND_URL usage to module-level constant BACKEND_URL",
+        "priority": "MEDIUM"
+      }
+    ]
+  },
+  "passed_tests": [
+    "Backend: Trader creates deal with proof of payment",
+    "Backend: Deal shows in Treasury queue as pending",
+    "Backend: Treasury returns deal with remarks",
+    "Backend: Trader sees returned deal with remarks",
+    "Backend: Trader can delete old proof on returned deal",
+    "Backend: Trader can upload new proof on returned deal",
+    "Backend: Resubmit changes status to pending and clears treasury fields (treasury_remarks='', processed_by=null, processed_at=null)",
+    "Backend: Resubmitted deal appears in Treasury queue",
+    "Backend: Treasury can confirm resubmitted deal",
+    "Backend: Audit trail logs 'deal_resubmitted' action",
+    "Backend: Resubmit returns 400 for pending deals (not returned)",
+    "Backend: Resubmit returns 400 for confirmed deals",
+    "Backend: Resubmit returns 400 for cancelled deals",
+    "Backend: Resubmit returns 403 for deals not owned by trader",
+    "Backend: Upload proof works for pending deals",
+    "Backend: Upload proof works for returned deals",
+    "Frontend: Trader sees deals with red 'returned' badge",
+    "Frontend: Returned deal detail shows red alert box with treasury remarks",
+    "Frontend: Resubmit button visible for returned deals",
+    "Frontend: Upload Proof button visible for returned deals",
+    "Frontend: Clicking Resubmit changes deal status to pending (success toast shown)",
+    "Frontend: Treasury Deal Queue shows pending deals correctly",
+    "Frontend: Treasury review dialog works with Confirm/Return buttons",
+    "Frontend: Upload Proof NOT visible for confirmed deals",
+    "Frontend: Upload Proof NOT visible for cancelled deals"
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_resubmit_workflow.py",
+    "/app/test_reports/pytest/resubmit_tests.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [],
+  "updated_files": [
+    "/app/backend/tests/test_resubmit_workflow.py",
+    "/app/frontend/src/pages/TreasuryPage.jsx"
+  ],
+  "success_rate": {
+    "backend": "100% (16/16 pytest tests passed)",
+    "frontend": "100% (All return-resubmit UI features verified)"
+  },
+  "test_credentials": {
+    "trader": "trader@fxtracker.com / Trader@123",
+    "treasury": "treasury@fxtracker.com / Treasury@123",
+    "admin": "admin@fxtracker.com / Admin@123"
+  },
+  "seed_data_creation": "Multiple test deals with TEST_ prefix created during backend testing for resubmit workflow verification",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Return-Resubmit workflow fully tested. Key endpoints: PUT /api/deals/{id}/resubmit (trader only, only for returned deals, clears treasury_remarks/processed_by/processed_at). Audit action: deal_resubmitted. UI elements: resubmit-deal-btn, upload-proof-btn, returned-alert. Upload proof button only visible for pending/returned deals, not for confirmed/cancelled.",
+  "features_tested": {
+    "return_resubmit_workflow": {
+      "status": "PASSED",
+      "details": "Full cycle tested: Trader creates deal -> uploads proof -> Treasury returns with remarks -> Trader sees returned alert -> Trader uploads new proof -> Trader clicks Resubmit -> Status changes to pending -> Deal appears in Treasury queue -> Treasury confirms"
+    },
+    "resubmit_endpoint_validation": {
+      "status": "PASSED",
+      "details": "PUT /api/deals/{id}/resubmit - 400 for pending/confirmed/cancelled deals, 403 for non-owner, 200 only for returned deals owned by trader"
+    },
+    "upload_proof_visibility": {
+      "status": "PASSED",
+      "details": "Upload proof button only visible for pending and returned deals, not shown for confirmed or cancelled deals"
+    },
+    "audit_trail": {
+      "status": "PASSED",
+      "details": "deal_resubmitted action logged to audit trail with user details and deal reference"
+    }
+  },
+  "backend_api_coverage": {
+    "resubmit_endpoint": {
+      "endpoint": "PUT /api/deals/{deal_id}/resubmit",
+      "access": "Trader only, must own the deal",
+      "valid_status": "returned",
+      "updates": {
+        "status": "pending",
+        "treasury_remarks": "",
+        "processed_by": null,
+        "processed_by_name": null,
+        "processed_at": null
+      },
+      "audit_action": "deal_resubmitted"
+    }
+  }
+}

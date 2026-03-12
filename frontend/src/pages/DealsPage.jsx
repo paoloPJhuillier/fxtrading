@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '@/lib/api';
 import { Card, CardContent } from '@/components/ui/card';
@@ -11,7 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Separator } from '@/components/ui/separator';
-import { Plus, FileText, Eye, Filter, X, Ban, Image as ImageIcon, Download } from 'lucide-react';
+import { Plus, FileText, Eye, Filter, X, Ban, Image as ImageIcon, Download, Upload, Trash2, RotateCcw } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 
@@ -31,6 +31,9 @@ export default function DealsPage() {
   const [cancelOpen, setCancelOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
   const [cancelling, setCancelling] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [resubmitting, setResubmitting] = useState(false);
+  const fileRef = useRef(null);
   const navigate = useNavigate();
 
   const fetchDeals = useCallback(async () => {
@@ -85,6 +88,44 @@ export default function DealsPage() {
       fetchDeals();
     } catch (err) { toast.error(err.response?.data?.detail || 'Cancel failed'); }
     finally { setCancelling(false); }
+  };
+
+  const uploadProof = async (e) => {
+    if (!sel || !e.target.files?.length) return;
+    setUploading(true);
+    try {
+      for (const file of e.target.files) {
+        const fd = new FormData();
+        fd.append('file', file);
+        await api.post(`/deals/${sel.id}/upload`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+      }
+      const res = await api.get(`/deals/${sel.id}`);
+      setSel(res.data);
+      toast.success('Proof of payment uploaded');
+    } catch (err) { toast.error(err.response?.data?.detail || 'Upload failed'); }
+    finally { setUploading(false); e.target.value = ''; }
+  };
+
+  const deleteProof = async (proofId) => {
+    if (!sel) return;
+    try {
+      await api.delete(`/deals/${sel.id}/proofs/${proofId}`);
+      const res = await api.get(`/deals/${sel.id}`);
+      setSel(res.data);
+      toast.success('Proof removed');
+    } catch (err) { toast.error('Delete failed'); }
+  };
+
+  const handleResubmit = async () => {
+    if (!sel) return;
+    setResubmitting(true);
+    try {
+      await api.put(`/deals/${sel.id}/resubmit`);
+      toast.success('Deal resubmitted for review');
+      setSel(null);
+      fetchDeals();
+    } catch (err) { toast.error(err.response?.data?.detail || 'Resubmit failed'); }
+    finally { setResubmitting(false); }
   };
 
   const AccountInfo = ({ deal, prefix, label }) => {
@@ -220,12 +261,26 @@ export default function DealsPage() {
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <Badge className={SB[sel.status] + ' text-xs'}>{sel.status}</Badge>
-                {sel.status === 'pending' && (
-                  <Button size="sm" variant="outline" className="text-red-600 border-red-200 hover:bg-red-50" onClick={() => setCancelOpen(true)} data-testid="cancel-deal-btn">
-                    <Ban className="h-3.5 w-3.5 mr-1.5" /> Cancel / Recall
-                  </Button>
-                )}
+                <div className="flex gap-2">
+                  {sel.status === 'returned' && (
+                    <Button size="sm" className="bg-[#518dca] hover:bg-[#518dca]/90 text-white" onClick={handleResubmit} disabled={resubmitting} data-testid="resubmit-deal-btn">
+                      <RotateCcw className="h-3.5 w-3.5 mr-1.5" /> {resubmitting ? 'Resubmitting...' : 'Resubmit'}
+                    </Button>
+                  )}
+                  {sel.status === 'pending' && (
+                    <Button size="sm" variant="outline" className="text-red-600 border-red-200 hover:bg-red-50" onClick={() => setCancelOpen(true)} data-testid="cancel-deal-btn">
+                      <Ban className="h-3.5 w-3.5 mr-1.5" /> Cancel / Recall
+                    </Button>
+                  )}
+                </div>
               </div>
+              {sel.status === 'returned' && sel.treasury_remarks && (
+                <div className="bg-red-50 border border-red-300 p-4 rounded-md" data-testid="returned-alert">
+                  <p className="text-xs font-semibold text-red-700 uppercase tracking-wider mb-1">Deal Returned by Treasury</p>
+                  <p className="text-sm text-red-800">{sel.treasury_remarks}</p>
+                  <p className="text-[10px] text-red-500 mt-2">Please upload an acceptable proof of payment and click Resubmit.</p>
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
                 <DI label="Client" val={sel.client_name} />
                 <DI label="Transaction Type" val={sel.transaction_type} />
@@ -254,14 +309,28 @@ export default function DealsPage() {
 
               <Separator />
               <div>
-                <p className="text-xs font-medium text-slate-600 uppercase tracking-wider mb-3">Settlement Proofs</p>
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-xs font-medium text-slate-600 uppercase tracking-wider">Proof of Payment</p>
+                  {(sel.status === 'pending' || sel.status === 'returned') && (
+                    <div>
+                      <input type="file" ref={fileRef} className="hidden" accept="image/*" multiple onChange={uploadProof} />
+                      <Button size="sm" variant="outline" onClick={() => fileRef.current?.click()} disabled={uploading} data-testid="upload-proof-btn">
+                        <Upload className="h-3 w-3 mr-1.5" /> {uploading ? 'Uploading...' : 'Upload Proof'}
+                      </Button>
+                    </div>
+                  )}
+                </div>
                 {sel.settlement_proofs?.length > 0 ? (
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                     {sel.settlement_proofs.map(p => (
                       <div key={p.id} className="relative group border rounded-lg overflow-hidden">
-                        <a href={`${process.env.REACT_APP_BACKEND_URL}/api/files/${p.path}`} target="_blank" rel="noopener noreferrer">
-                          <img src={`${process.env.REACT_APP_BACKEND_URL}/api/files/${p.path}`} alt={p.filename} className="w-full h-28 object-cover" />
-                        </a>
+                        <img src={`${process.env.REACT_APP_BACKEND_URL}/api/files/${p.path}`} alt={p.filename} className="w-full h-28 object-cover" />
+                        <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                          <a href={`${process.env.REACT_APP_BACKEND_URL}/api/files/${p.path}`} target="_blank" rel="noopener noreferrer" className="text-white"><Eye className="h-4 w-4" /></a>
+                          {(sel.status === 'pending' || sel.status === 'returned') && (
+                            <button onClick={() => deleteProof(p.id)} className="text-white hover:text-red-300"><Trash2 className="h-4 w-4" /></button>
+                          )}
+                        </div>
                         <p className="text-[10px] text-slate-500 p-1.5 truncate">{p.filename}</p>
                       </div>
                     ))}
@@ -269,7 +338,7 @@ export default function DealsPage() {
                 ) : (
                   <div className="text-center py-6 border border-dashed rounded-lg">
                     <ImageIcon className="h-8 w-8 text-slate-300 mx-auto mb-2" />
-                    <p className="text-xs text-slate-400">No settlement proofs uploaded yet</p>
+                    <p className="text-xs text-slate-400">No proof of payment uploaded yet</p>
                   </div>
                 )}
               </div>
