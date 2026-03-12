@@ -33,6 +33,14 @@ Mobile-responsive full-stack FX Trading Tracker platform with:
 - [x] Bank/Crypto toggle and "Ours" section on deal form
 - [x] **P0 Performance Fix (Feb 2026):** React.memo on all table rows (DealRow, TreasuryRow, TxRow, UserRow, AuditRow) + useCallback for handlers. Modal open times reduced from ~12s to <0.2s
 - [x] **Dialog Close Overlay Fix (Mar 2026):** Reduced overlay from bg-black/80 to bg-black/40, sped up animation to 150ms, and implemented useRef pattern to preserve dialog content during exit animation. Eliminates black flash on modal close.
+- [x] **Comprehensive Performance Overhaul (Mar 2026):**
+  - Auth: Reads localStorage immediately, no longer blocks app rendering
+  - Code splitting: React.lazy for all page components (reduces initial bundle)
+  - Dashboard: Skeleton UI on first load, opacity fade on range change (keeps data visible)
+  - All tables: Keep previous data visible during loading (opacity fade instead of blocking spinner)
+  - Backend: Dashboard uses MongoDB $facet aggregation (no longer loads all docs into memory)
+  - Layout: SidebarContent extracted as memo'd component
+  - Dashboard table: RecentDealRow memo'd
 
 ## P0/P1/P2 Backlog
 - No pending issues or feature requests
