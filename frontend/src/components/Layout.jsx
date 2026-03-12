@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import {
   LayoutDashboard, FileText, PlusCircle, ClipboardCheck,
-  Database, Users, History, LogOut, Menu, TrendingUp
+  Database, Users, History, LogOut, Menu, TrendingUp, Activity
 } from 'lucide-react';
 
 const navConfig = {
@@ -23,6 +23,7 @@ const navConfig = {
     { to: '/reference-data', icon: Database, label: 'Reference Data' },
     { to: '/users', icon: Users, label: 'Users' },
     { to: '/transactions', icon: History, label: 'Transactions' },
+    { to: '/audit-log', icon: Activity, label: 'Audit Trail' },
   ],
 };
 

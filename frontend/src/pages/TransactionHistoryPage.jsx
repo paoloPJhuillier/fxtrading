@@ -9,10 +9,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Separator } from '@/components/ui/separator';
-import { Eye, FileText, Filter, X, Image as ImageIcon } from 'lucide-react';
+import { Eye, FileText, Filter, X, Image as ImageIcon, Download } from 'lucide-react';
 import { format } from 'date-fns';
 
-const SB = { pending: 'bg-yellow-100 text-yellow-800', confirmed: 'bg-green-100 text-green-800', returned: 'bg-red-100 text-red-800' };
+const SB = { pending: 'bg-yellow-100 text-yellow-800', confirmed: 'bg-green-100 text-green-800', returned: 'bg-red-100 text-red-800', cancelled: 'bg-slate-200 text-slate-600' };
 
 export default function TransactionHistoryPage() {
   const [deals, setDeals] = useState([]);
@@ -42,6 +42,25 @@ export default function TransactionHistoryPage() {
   const clearFilters = () => setFilter({ status: 'all', client: '', currency: '', date_from: '', date_to: '' });
   const hasFilters = filter.status !== 'all' || filter.client || filter.currency || filter.date_from || filter.date_to;
 
+  const exportCSV = async () => {
+    try {
+      const params = new URLSearchParams();
+      if (filter.status !== 'all') params.append('status', filter.status);
+      if (filter.client) params.append('client', filter.client);
+      if (filter.currency) params.append('currency', filter.currency);
+      if (filter.date_from) params.append('date_from', filter.date_from);
+      if (filter.date_to) params.append('date_to', filter.date_to);
+      const q = params.toString();
+      const res = await api.get(`/deals/export${q ? '?' + q : ''}`, { responseType: 'blob' });
+      const url = window.URL.createObjectURL(new Blob([res.data]));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `deals_export_${new Date().toISOString().slice(0,10)}.csv`;
+      a.click();
+      window.URL.revokeObjectURL(url);
+    } catch (e) { console.error('Export failed', e); }
+  };
+
   return (
     <div data-testid="transactions-page">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
@@ -49,9 +68,14 @@ export default function TransactionHistoryPage() {
           <h1 className="text-3xl font-bold text-[#08263e]" style={{ fontFamily: 'Chivo' }}>Transaction History</h1>
           <p className="text-sm text-slate-500 mt-1">All FX deal transactions</p>
         </div>
-        <Button variant={showFilters ? 'default' : 'outline'} size="sm" onClick={() => setShowFilters(!showFilters)} className={showFilters ? 'bg-[#518dca]' : ''} data-testid="tx-toggle-filters">
-          <Filter className="h-3.5 w-3.5 mr-1.5" /> Filters {hasFilters && <Badge className="ml-1.5 bg-[#ec474e] text-white text-[10px] px-1.5 py-0">Active</Badge>}
-        </Button>
+        <div className="flex gap-2">
+          <Button variant={showFilters ? 'default' : 'outline'} size="sm" onClick={() => setShowFilters(!showFilters)} className={showFilters ? 'bg-[#518dca]' : ''} data-testid="tx-toggle-filters">
+            <Filter className="h-3.5 w-3.5 mr-1.5" /> Filters {hasFilters && <Badge className="ml-1.5 bg-[#ec474e] text-white text-[10px] px-1.5 py-0">Active</Badge>}
+          </Button>
+          <Button variant="outline" size="sm" onClick={exportCSV} data-testid="export-csv-btn">
+            <Download className="h-3.5 w-3.5 mr-1.5" /> Export CSV
+          </Button>
+        </div>
       </div>
 
       {showFilters && (
@@ -61,7 +85,7 @@ export default function TransactionHistoryPage() {
               <div className="space-y-1"><Label className="text-xs">Status</Label>
                 <Select value={filter.status} onValueChange={v => setFilter(p => ({ ...p, status: v }))}>
                   <SelectTrigger className="h-8 text-xs" data-testid="tx-filter-status"><SelectValue /></SelectTrigger>
-                  <SelectContent><SelectItem value="all">All</SelectItem><SelectItem value="pending">Pending</SelectItem><SelectItem value="confirmed">Confirmed</SelectItem><SelectItem value="returned">Returned</SelectItem></SelectContent>
+                  <SelectContent><SelectItem value="all">All</SelectItem><SelectItem value="pending">Pending</SelectItem><SelectItem value="confirmed">Confirmed</SelectItem><SelectItem value="returned">Returned</SelectItem><SelectItem value="cancelled">Cancelled</SelectItem></SelectContent>
                 </Select>
               </div>
               <div className="space-y-1"><Label className="text-xs">Client</Label><Input className="h-8 text-xs" placeholder="Search client..." value={filter.client} onChange={e => setFilter(p => ({ ...p, client: e.target.value }))} /></div>

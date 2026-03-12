@@ -1,6 +1,6 @@
 from fastapi import FastAPI, APIRouter, Depends, HTTPException, Query, UploadFile, File
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from fastapi.responses import Response
+from fastapi.responses import Response, StreamingResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -8,6 +8,8 @@ from pymongo import ReturnDocument
 import os
 import logging
 import uuid
+import csv
+import io
 import requests as http_requests
 from pathlib import Path
 from pydantic import BaseModel
@@ -180,6 +182,24 @@ async def generate_deal_reference():
     return f"FX-{today}-{counter['seq']:04d}"
 
 
+# --- Audit Log Helper ---
+async def log_audit(action: str, user: dict, entity_type: str, entity_id: str, entity_ref: str = "", details: str = "", metadata: dict = None):
+    entry = {
+        "id": str(uuid.uuid4()),
+        "action": action,
+        "entity_type": entity_type,
+        "entity_id": entity_id,
+        "entity_ref": entity_ref,
+        "user_id": user["id"],
+        "user_name": user["name"],
+        "user_role": user["role"],
+        "details": details,
+        "metadata": metadata or {},
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.audit_logs.insert_one(entry)
+
+
 # --- Auth Endpoints ---
 @api_router.post("/auth/login")
 async def login(req: LoginRequest):
@@ -222,6 +242,7 @@ async def create_user(req: UserCreate, user=Depends(get_current_user)):
         "created_at": datetime.now(timezone.utc).isoformat()
     }
     await db.users.insert_one(new_user)
+    await log_audit("user_created", user, "user", new_user["id"], new_user["email"], f"Created user {new_user['name']} ({new_user['role']})")
     return {"id": new_user["id"], "email": new_user["email"], "name": new_user["name"], "role": new_user["role"], "is_active": True}
 
 @api_router.put("/users/{user_id}")
@@ -234,18 +255,63 @@ async def update_user(user_id: str, req: UserUpdate, user=Depends(get_current_us
         raise HTTPException(status_code=400, detail="No fields to update")
     await db.users.update_one({"id": user_id}, {"$set": update_data})
     updated = await db.users.find_one({"id": user_id}, {"_id": 0, "password_hash": 0})
+    await log_audit("user_updated", user, "user", user_id, updated.get("email", ""), f"Updated user fields: {', '.join(update_data.keys())}")
     return updated
 
 @api_router.delete("/users/{user_id}")
 async def delete_user(user_id: str, user=Depends(get_current_user)):
     await require_role(user, ["admin"])
+    target = await db.users.find_one({"id": user_id}, {"_id": 0})
     result = await db.users.delete_one({"id": user_id})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="User not found")
+    await log_audit("user_deleted", user, "user", user_id, target.get("email", "") if target else "", f"Deleted user")
     return {"message": "User deleted"}
 
 
 # --- Deal Endpoints ---
+@api_router.get("/deals/export")
+async def export_deals_csv(
+    status_filter: Optional[str] = Query(None, alias="status"),
+    client: Optional[str] = Query(None),
+    currency: Optional[str] = Query(None),
+    date_from: Optional[str] = Query(None),
+    date_to: Optional[str] = Query(None),
+    user=Depends(get_current_user)
+):
+    query = {}
+    if user["role"] == "trader":
+        query["created_by"] = user["id"]
+    if status_filter:
+        query["status"] = status_filter
+    if client:
+        query["client_name"] = {"$regex": client, "$options": "i"}
+    if currency:
+        query["$or"] = [{"buy_currency": currency}, {"sell_currency": currency}]
+    if date_from:
+        query.setdefault("deal_date", {})["$gte"] = date_from
+    if date_to:
+        query.setdefault("deal_date", {})["$lte"] = date_to
+    deals = await db.deals.find(query, {"_id": 0}).sort("created_at", -1).to_list(100000)
+    output = io.StringIO()
+    fields = ["reference_number", "client_name", "transaction_type", "transfer_type", "deal_date", "value_date",
+              "buy_currency", "sell_currency", "currency_amount", "rate", "amount",
+              "from_type", "from_company", "from_bank", "from_account_num", "from_wallet_address",
+              "to_type", "to_company", "to_bank", "to_account_num", "to_wallet_address",
+              "ours_type", "ours_bank", "ours_account_num", "ours_wallet_address",
+              "status", "remarks", "treasury_remarks", "cancellation_reason",
+              "created_by_name", "processed_by_name", "processed_at", "created_at"]
+    writer = csv.DictWriter(output, fieldnames=fields, extrasaction="ignore")
+    writer.writeheader()
+    for d in deals:
+        writer.writerow({f: d.get(f, "") for f in fields})
+    output.seek(0)
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename=deals_export_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.csv"}
+    )
+
 @api_router.get("/deals")
 async def list_deals(
     status_filter: Optional[str] = Query(None, alias="status"),
@@ -292,6 +358,7 @@ async def create_deal(req: DealCreate, user=Depends(get_current_user)):
     }
     await db.deals.insert_one(deal)
     deal.pop("_id", None)
+    await log_audit("deal_created", user, "deal", deal["id"], ref, f"Created deal {ref} for {req.client_name} — {req.buy_currency}/{req.sell_currency} {req.currency_amount}")
     return deal
 
 @api_router.get("/deals/{deal_id}")
@@ -323,6 +390,7 @@ async def upload_settlement_proof(deal_id: str, file: UploadFile = File(...), us
         raise HTTPException(status_code=500, detail="Upload failed")
     proof = {"id": str(uuid.uuid4()), "path": path, "filename": file.filename, "content_type": file.content_type, "uploaded_at": datetime.now(timezone.utc).isoformat(), "uploaded_by": user["name"]}
     await db.deals.update_one({"id": deal_id}, {"$push": {"settlement_proofs": proof}})
+    await log_audit("proof_uploaded", user, "deal", deal_id, deal.get("reference_number", ""), f"Uploaded settlement proof: {file.filename}")
     return proof
 
 @api_router.get("/files/{path:path}")
@@ -336,7 +404,9 @@ async def get_file(path: str, user=Depends(get_current_user)):
 
 @api_router.delete("/deals/{deal_id}/proofs/{proof_id}")
 async def delete_settlement_proof(deal_id: str, proof_id: str, user=Depends(get_current_user)):
+    deal = await db.deals.find_one({"id": deal_id}, {"_id": 0})
     await db.deals.update_one({"id": deal_id}, {"$pull": {"settlement_proofs": {"id": proof_id}}})
+    await log_audit("proof_deleted", user, "deal", deal_id, deal.get("reference_number", "") if deal else "", f"Deleted settlement proof")
     return {"message": "Proof deleted"}
 
 @api_router.put("/deals/{deal_id}/process")
@@ -361,6 +431,7 @@ async def process_deal(deal_id: str, req: DealProcess, user=Depends(get_current_
     }
     await db.deals.update_one({"id": deal_id}, {"$set": update})
     updated = await db.deals.find_one({"id": deal_id}, {"_id": 0})
+    await log_audit(f"deal_{req.status}", user, "deal", deal_id, deal.get("reference_number", ""), f"Deal {req.status} — {req.treasury_remarks}")
     return updated
 
 @api_router.put("/deals/{deal_id}/cancel")
@@ -383,6 +454,7 @@ async def cancel_deal(deal_id: str, req: DealCancel, user=Depends(get_current_us
     }
     await db.deals.update_one({"id": deal_id}, {"$set": update})
     updated = await db.deals.find_one({"id": deal_id}, {"_id": 0})
+    await log_audit("deal_cancelled", user, "deal", deal_id, deal.get("reference_number", ""), f"Deal cancelled — {req.cancellation_reason}")
     return updated
 
 
@@ -445,6 +517,36 @@ async def delete_reference(entity_type: str, item_id: str, user=Depends(get_curr
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Item not found")
     return {"message": "Item deleted"}
+
+
+# --- Audit Logs ---
+@api_router.get("/audit-logs")
+async def list_audit_logs(
+    action: Optional[str] = Query(None),
+    entity_type: Optional[str] = Query(None),
+    user_name: Optional[str] = Query(None),
+    date_from: Optional[str] = Query(None),
+    date_to: Optional[str] = Query(None),
+    page: int = Query(1, ge=1),
+    limit: int = Query(50, ge=1, le=200),
+    user=Depends(get_current_user)
+):
+    await require_role(user, ["admin"])
+    query = {}
+    if action:
+        query["action"] = action
+    if entity_type:
+        query["entity_type"] = entity_type
+    if user_name:
+        query["user_name"] = {"$regex": user_name, "$options": "i"}
+    if date_from:
+        query.setdefault("created_at", {})["$gte"] = date_from
+    if date_to:
+        query.setdefault("created_at", {})["$lte"] = date_to + "T23:59:59"
+    total = await db.audit_logs.count_documents(query)
+    skip = (page - 1) * limit
+    logs = await db.audit_logs.find(query, {"_id": 0}).sort("created_at", -1).skip(skip).limit(limit).to_list(limit)
+    return {"logs": logs, "total": total, "page": page, "pages": (total + limit - 1) // limit if total > 0 else 1}
 
 
 # --- Dashboard ---

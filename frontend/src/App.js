@@ -11,6 +11,7 @@ import TreasuryPage from '@/pages/TreasuryPage';
 import ReferenceDataPage from '@/pages/ReferenceDataPage';
 import UsersPage from '@/pages/UsersPage';
 import TransactionHistoryPage from '@/pages/TransactionHistoryPage';
+import AuditLogPage from '@/pages/AuditLogPage';
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth();
@@ -38,6 +39,7 @@ function AppRoutes() {
         <Route path="/reference-data" element={<ReferenceDataPage />} />
         <Route path="/users" element={<UsersPage />} />
         <Route path="/transactions" element={<TransactionHistoryPage />} />
+        <Route path="/audit-log" element={<AuditLogPage />} />
       </Route>
     </Routes>
   );

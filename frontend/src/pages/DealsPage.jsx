@@ -11,7 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Separator } from '@/components/ui/separator';
-import { Plus, FileText, Eye, Filter, X, Ban, Image as ImageIcon } from 'lucide-react';
+import { Plus, FileText, Eye, Filter, X, Ban, Image as ImageIcon, Download } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 
@@ -53,6 +53,25 @@ export default function DealsPage() {
 
   const clearFilters = () => setFilter({ status: 'all', client: '', currency: '', date_from: '', date_to: '' });
   const hasFilters = filter.status !== 'all' || filter.client || filter.currency || filter.date_from || filter.date_to;
+
+  const exportCSV = async () => {
+    try {
+      const params = new URLSearchParams();
+      if (filter.status !== 'all') params.append('status', filter.status);
+      if (filter.client) params.append('client', filter.client);
+      if (filter.currency) params.append('currency', filter.currency);
+      if (filter.date_from) params.append('date_from', filter.date_from);
+      if (filter.date_to) params.append('date_to', filter.date_to);
+      const q = params.toString();
+      const res = await api.get(`/deals/export${q ? '?' + q : ''}`, { responseType: 'blob' });
+      const url = window.URL.createObjectURL(new Blob([res.data]));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `my_deals_export_${new Date().toISOString().slice(0,10)}.csv`;
+      a.click();
+      window.URL.revokeObjectURL(url);
+    } catch (e) { console.error('Export failed', e); }
+  };
 
   const handleCancel = async () => {
     if (!cancelReason.trim()) { toast.error('Cancellation reason is required'); return; }
@@ -106,6 +125,9 @@ export default function DealsPage() {
         <div className="flex gap-2">
           <Button variant={showFilters ? 'default' : 'outline'} size="sm" onClick={() => setShowFilters(!showFilters)} data-testid="toggle-filters-btn" className={showFilters ? 'bg-[#518dca]' : ''}>
             <Filter className="h-3.5 w-3.5 mr-1.5" /> Filters {hasFilters && <Badge className="ml-1.5 bg-[#ec474e] text-white text-[10px] px-1.5 py-0">Active</Badge>}
+          </Button>
+          <Button variant="outline" size="sm" onClick={exportCSV} data-testid="export-csv-btn">
+            <Download className="h-3.5 w-3.5 mr-1.5" /> Export CSV
           </Button>
           <Button className="bg-[#08263e] hover:bg-[#08263e]/90" size="sm" onClick={() => navigate('/deals/new')} data-testid="new-deal-btn">
             <Plus className="h-4 w-4 mr-1.5" /> New Deal
