@@ -29,6 +29,16 @@ export default function DealsPage() {
   const [filter, setFilter] = useState({ status: 'all', client: '', currency: '', date_from: '', date_to: '' });
   const [debouncedFilter, setDebouncedFilter] = useState(filter);
   const [page, setPage] = useState(1);
+  const [showFilters, setShowFilters] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [sel, setSel] = useState(null);
+  const [cancelOpen, setCancelOpen] = useState(false);
+  const [cancelReason, setCancelReason] = useState('');
+  const [cancelling, setCancelling] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [resubmitting, setResubmitting] = useState(false);
+  const fileRef = useRef(null);
+  const navigate = useNavigate();
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedFilter(filter), 400);
