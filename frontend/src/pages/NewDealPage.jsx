@@ -26,8 +26,9 @@ export default function NewDealPage() {
   const [f, setF] = useState({
     transaction_type: '', transfer_type: '', client_name: '',
     deal_date: new Date(), value_date: new Date(),
-    from_company: '', from_bank: '', from_account_num: '',
-    to_company: '', to_bank: '', to_account_num: '',
+    from_type: 'bank', from_company: '', from_bank: '', from_account_num: '', from_wallet_address: '',
+    to_type: 'bank', to_company: '', to_bank: '', to_account_num: '', to_wallet_address: '',
+    ours_type: 'bank', ours_bank: '', ours_account_num: '', ours_wallet_address: '',
     buy_currency: '', sell_currency: '',
     currency_amount: '', amount: '', rate: '', remarks: ''
   });
@@ -54,18 +55,42 @@ export default function NewDealPage() {
         const r = parseFloat(k === 'rate' ? v : next.rate) || 0;
         next.amount = (ca > 0 && r > 0) ? (ca * r).toFixed(2) : '';
       }
+      // Reset dependent fields when switching type
+      if (k === 'from_type') { next.from_bank = ''; next.from_account_num = ''; next.from_wallet_address = ''; }
+      if (k === 'to_type') { next.to_bank = ''; next.to_account_num = ''; next.to_wallet_address = ''; }
+      if (k === 'ours_type') { next.ours_bank = ''; next.ours_account_num = ''; next.ours_wallet_address = ''; }
       return next;
     });
     if (errors[k]) setErrors(p => ({ ...p, [k]: null }));
   };
 
-  const REQUIRED = ['transaction_type', 'transfer_type', 'client_name', 'from_company', 'from_bank', 'from_account_num', 'to_company', 'to_bank', 'to_account_num', 'buy_currency', 'sell_currency', 'currency_amount', 'rate'];
-
   const validate = () => {
     const errs = {};
-    REQUIRED.forEach(k => { if (!f[k]) errs[k] = 'Required'; });
+    const base = ['transaction_type', 'transfer_type', 'client_name', 'from_company', 'to_company', 'buy_currency', 'sell_currency', 'currency_amount', 'rate'];
+    base.forEach(k => { if (!f[k]) errs[k] = 'Required'; });
     if (!f.deal_date) errs.deal_date = 'Required';
     if (!f.value_date) errs.value_date = 'Required';
+    // From section validation
+    if (f.from_type === 'bank') {
+      if (!f.from_bank) errs.from_bank = 'Required';
+      if (!f.from_account_num) errs.from_account_num = 'Required';
+    } else {
+      if (!f.from_wallet_address) errs.from_wallet_address = 'Required';
+    }
+    // To section validation
+    if (f.to_type === 'bank') {
+      if (!f.to_bank) errs.to_bank = 'Required';
+      if (!f.to_account_num) errs.to_account_num = 'Required';
+    } else {
+      if (!f.to_wallet_address) errs.to_wallet_address = 'Required';
+    }
+    // Ours section validation
+    if (f.ours_type === 'bank') {
+      if (!f.ours_bank) errs.ours_bank = 'Required';
+      if (!f.ours_account_num) errs.ours_account_num = 'Required';
+    } else {
+      if (!f.ours_wallet_address) errs.ours_wallet_address = 'Required';
+    }
     setErrors(errs);
     return Object.keys(errs).length === 0;
   };
@@ -97,6 +122,19 @@ export default function NewDealPage() {
   const stablecoin = ref.currencies.filter(c => c.type === 'stablecoin');
   const crypto = ref.currencies.filter(c => c.type === 'crypto');
 
+  const TypeToggle = ({ value, onChange, testId }) => (
+    <div className="flex gap-1 p-0.5 bg-slate-100 rounded-md w-fit">
+      <button type="button" onClick={() => onChange('bank')} data-testid={`${testId}-bank`}
+        className={`px-3 py-1 text-xs font-medium rounded transition-all ${value === 'bank' ? 'bg-[#08263e] text-white shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+        Bank
+      </button>
+      <button type="button" onClick={() => onChange('crypto')} data-testid={`${testId}-crypto`}
+        className={`px-3 py-1 text-xs font-medium rounded transition-all ${value === 'crypto' ? 'bg-[#08263e] text-white shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+        Crypto
+      </button>
+    </div>
+  );
+
   return (
     <div data-testid="new-deal-page">
       <div className="flex items-center gap-4 mb-8">
@@ -112,7 +150,7 @@ export default function NewDealPage() {
           <Card>
             <CardHeader><CardTitle className="text-base text-[#08263e]" style={{ fontFamily: 'Chivo' }}>Deal Information</CardTitle></CardHeader>
             <CardContent className="space-y-4">
-              <VField label="Client / Client Name" error={errors.client_name}>
+              <VField label="Client Name" error={errors.client_name}>
                 <Input value={f.client_name} onChange={e => up('client_name', e.target.value)} placeholder="Enter client name" data-testid="client-name-input" className={errors.client_name ? 'border-red-400' : ''} />
               </VField>
               <div className="grid grid-cols-2 gap-4">
@@ -163,27 +201,81 @@ export default function NewDealPage() {
           </Card>
 
           <Card>
-            <CardHeader><CardTitle className="text-base text-[#08263e]" style={{ fontFamily: 'Chivo' }}>Source (From)</CardTitle></CardHeader>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base text-[#08263e]" style={{ fontFamily: 'Chivo' }}>Source (From)</CardTitle>
+                <TypeToggle value={f.from_type} onChange={v => up('from_type', v)} testId="from-type" />
+              </div>
+            </CardHeader>
             <CardContent className="space-y-4">
               <SearchSelect label="Company" value={f.from_company} onChange={v => up('from_company', v)} items={ref.companies} displayKey="name" tid="from-company" placeholder="Search company..." error={errors.from_company} />
-              <SearchSelect label="Bank" value={f.from_bank} onChange={v => up('from_bank', v)} items={ref.banks} displayKey="name" tid="from-bank" placeholder="Search bank..." error={errors.from_bank} />
-              <VField label="Account Number" error={errors.from_account_num}>
-                <Input value={f.from_account_num} onChange={e => up('from_account_num', e.target.value)} placeholder="Enter account number" data-testid="from-account-input" className={errors.from_account_num ? 'border-red-400' : ''} />
-              </VField>
+              {f.from_type === 'bank' ? (
+                <>
+                  <SearchSelect label="Bank" value={f.from_bank} onChange={v => up('from_bank', v)} items={ref.banks} displayKey="name" tid="from-bank" placeholder="Search bank..." error={errors.from_bank} />
+                  <VField label="Account Number" error={errors.from_account_num}>
+                    <Input value={f.from_account_num} onChange={e => up('from_account_num', e.target.value)} placeholder="Enter account number" data-testid="from-account-input" className={errors.from_account_num ? 'border-red-400' : ''} />
+                  </VField>
+                </>
+              ) : (
+                <VField label="Wallet Address" error={errors.from_wallet_address}>
+                  <Input value={f.from_wallet_address} onChange={e => up('from_wallet_address', e.target.value)} placeholder="Enter crypto wallet address" data-testid="from-wallet-input" className={errors.from_wallet_address ? 'border-red-400' : ''} />
+                </VField>
+              )}
             </CardContent>
           </Card>
 
           <Card>
-            <CardHeader><CardTitle className="text-base text-[#08263e]" style={{ fontFamily: 'Chivo' }}>Destination (To)</CardTitle></CardHeader>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base text-[#08263e]" style={{ fontFamily: 'Chivo' }}>Destination (To)</CardTitle>
+                <TypeToggle value={f.to_type} onChange={v => up('to_type', v)} testId="to-type" />
+              </div>
+            </CardHeader>
             <CardContent className="space-y-4">
               <SearchSelect label="Company" value={f.to_company} onChange={v => up('to_company', v)} items={ref.companies} displayKey="name" tid="to-company" placeholder="Search company..." error={errors.to_company} />
-              <SearchSelect label="Bank" value={f.to_bank} onChange={v => up('to_bank', v)} items={ref.banks} displayKey="name" tid="to-bank" placeholder="Search bank..." error={errors.to_bank} />
-              <VField label="Account Number" error={errors.to_account_num}>
-                <Input value={f.to_account_num} onChange={e => up('to_account_num', e.target.value)} placeholder="Enter account number" data-testid="to-account-input" className={errors.to_account_num ? 'border-red-400' : ''} />
-              </VField>
+              {f.to_type === 'bank' ? (
+                <>
+                  <SearchSelect label="Bank" value={f.to_bank} onChange={v => up('to_bank', v)} items={ref.banks} displayKey="name" tid="to-bank" placeholder="Search bank..." error={errors.to_bank} />
+                  <VField label="Account Number" error={errors.to_account_num}>
+                    <Input value={f.to_account_num} onChange={e => up('to_account_num', e.target.value)} placeholder="Enter account number" data-testid="to-account-input" className={errors.to_account_num ? 'border-red-400' : ''} />
+                  </VField>
+                </>
+              ) : (
+                <VField label="Wallet Address" error={errors.to_wallet_address}>
+                  <Input value={f.to_wallet_address} onChange={e => up('to_wallet_address', e.target.value)} placeholder="Enter crypto wallet address" data-testid="to-wallet-input" className={errors.to_wallet_address ? 'border-red-400' : ''} />
+                </VField>
+              )}
             </CardContent>
           </Card>
         </div>
+
+        <Card className="mt-6">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-base text-[#08263e]" style={{ fontFamily: 'Chivo' }}>Ours (Receiving Account)</CardTitle>
+                <p className="text-xs text-slate-400 mt-1">Account where the client credits us</p>
+              </div>
+              <TypeToggle value={f.ours_type} onChange={v => up('ours_type', v)} testId="ours-type" />
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {f.ours_type === 'bank' ? (
+                <>
+                  <SearchSelect label="Bank" value={f.ours_bank} onChange={v => up('ours_bank', v)} items={ref.banks} displayKey="name" tid="ours-bank" placeholder="Search bank..." error={errors.ours_bank} />
+                  <VField label="Account Number" error={errors.ours_account_num}>
+                    <Input value={f.ours_account_num} onChange={e => up('ours_account_num', e.target.value)} placeholder="Enter account number" data-testid="ours-account-input" className={errors.ours_account_num ? 'border-red-400' : ''} />
+                  </VField>
+                </>
+              ) : (
+                <VField label="Wallet Address" error={errors.ours_wallet_address}>
+                  <Input value={f.ours_wallet_address} onChange={e => up('ours_wallet_address', e.target.value)} placeholder="Enter crypto wallet address" data-testid="ours-wallet-input" className={errors.ours_wallet_address ? 'border-red-400' : ''} />
+                </VField>
+              )}
+            </div>
+          </CardContent>
+        </Card>
 
         <Card className="mt-6">
           <CardContent className="pt-6">
@@ -221,12 +313,21 @@ export default function NewDealPage() {
             <CR label={`Currency Amount (${f.buy_currency || '-'})`} val={f.currency_amount ? Number(f.currency_amount).toLocaleString() : '-'} mono />
             <CR label="Exchange Rate" val={f.rate || '-'} mono />
             <CR label={`Converted Amount (${f.sell_currency || '-'})`} val={f.amount ? Number(f.amount).toLocaleString() : '-'} mono />
-            <CR label="From Company" val={f.from_company} />
-            <CR label="From Bank" val={f.from_bank} />
-            <CR label="From Account" val={f.from_account_num} mono />
-            <CR label="To Company" val={f.to_company} />
-            <CR label="To Bank" val={f.to_bank} />
-            <CR label="To Account" val={f.to_account_num} mono />
+          </div>
+          <Separator />
+          <div className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
+            <div className="col-span-2 text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Source (From) — {f.from_type === 'bank' ? 'Bank' : 'Crypto'}</div>
+            <CR label="Company" val={f.from_company} />
+            {f.from_type === 'bank' ? (<><CR label="Bank" val={f.from_bank} /><CR label="Account Number" val={f.from_account_num} mono /></>) : (<CR label="Wallet Address" val={f.from_wallet_address} mono />)}
+          </div>
+          <div className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
+            <div className="col-span-2 text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Destination (To) — {f.to_type === 'bank' ? 'Bank' : 'Crypto'}</div>
+            <CR label="Company" val={f.to_company} />
+            {f.to_type === 'bank' ? (<><CR label="Bank" val={f.to_bank} /><CR label="Account Number" val={f.to_account_num} mono /></>) : (<CR label="Wallet Address" val={f.to_wallet_address} mono />)}
+          </div>
+          <div className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
+            <div className="col-span-2 text-[10px] font-semibold text-slate-500 uppercase tracking-wider bg-yellow-50 p-1.5 rounded">Ours (Receiving) — {f.ours_type === 'bank' ? 'Bank' : 'Crypto'}</div>
+            {f.ours_type === 'bank' ? (<><CR label="Bank" val={f.ours_bank} /><CR label="Account Number" val={f.ours_account_num} mono /></>) : (<CR label="Wallet Address" val={f.ours_wallet_address} mono />)}
           </div>
           {f.remarks && (<><Separator /><div><p className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Remarks</p><p className="text-sm">{f.remarks}</p></div></>)}
           {f.buy_currency && f.sell_currency && f.currency_amount && f.rate && (

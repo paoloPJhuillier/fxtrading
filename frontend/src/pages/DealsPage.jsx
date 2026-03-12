@@ -6,15 +6,21 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
+import { Textarea } from '@/components/ui/textarea';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Separator } from '@/components/ui/separator';
-import { Plus, FileText, Eye, Filter, X, Upload, Trash2, Image as ImageIcon } from 'lucide-react';
+import { Plus, FileText, Eye, Filter, X, Upload, Trash2, Image as ImageIcon, Ban } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 
-const SB = { pending: 'bg-yellow-100 text-yellow-800', confirmed: 'bg-green-100 text-green-800', returned: 'bg-red-100 text-red-800' };
+const SB = {
+  pending: 'bg-yellow-100 text-yellow-800',
+  confirmed: 'bg-green-100 text-green-800',
+  returned: 'bg-red-100 text-red-800',
+  cancelled: 'bg-slate-200 text-slate-600',
+};
 
 export default function DealsPage() {
   const [deals, setDeals] = useState([]);
@@ -23,6 +29,9 @@ export default function DealsPage() {
   const [loading, setLoading] = useState(true);
   const [sel, setSel] = useState(null);
   const [uploading, setUploading] = useState(false);
+  const [cancelOpen, setCancelOpen] = useState(false);
+  const [cancelReason, setCancelReason] = useState('');
+  const [cancelling, setCancelling] = useState(false);
   const fileRef = useRef(null);
   const navigate = useNavigate();
 
@@ -73,6 +82,48 @@ export default function DealsPage() {
     } catch (err) { toast.error('Delete failed'); }
   };
 
+  const handleCancel = async () => {
+    if (!cancelReason.trim()) { toast.error('Cancellation reason is required'); return; }
+    setCancelling(true);
+    try {
+      await api.put(`/deals/${sel.id}/cancel`, { cancellation_reason: cancelReason });
+      toast.success('Deal cancelled successfully');
+      setCancelOpen(false);
+      setCancelReason('');
+      setSel(null);
+      fetchDeals();
+    } catch (err) { toast.error(err.response?.data?.detail || 'Cancel failed'); }
+    finally { setCancelling(false); }
+  };
+
+  const AccountInfo = ({ deal, prefix, label }) => {
+    const type = deal[`${prefix}_type`] || 'bank';
+    return (
+      <div>
+        <p className="text-[10px] text-slate-400 uppercase tracking-wider">{label}</p>
+        {type === 'crypto' ? (
+          <p className="text-sm font-medium">{deal[`${prefix}_company`]} / <span className="font-mono text-xs">{deal[`${prefix}_wallet_address`] || '-'}</span></p>
+        ) : (
+          <p className="text-sm font-medium">{deal[`${prefix}_company`] || ''} / {deal[`${prefix}_bank`] || ''} <span className="font-mono text-xs">({deal[`${prefix}_account_num`] || '-'})</span></p>
+        )}
+      </div>
+    );
+  };
+
+  const OursInfo = ({ deal }) => {
+    const type = deal.ours_type || 'bank';
+    return (
+      <div className="bg-yellow-50 border border-yellow-200 p-3 rounded-md">
+        <p className="text-[10px] text-yellow-700 uppercase tracking-wider font-semibold mb-1">Ours (Receiving Account)</p>
+        {type === 'crypto' ? (
+          <p className="text-sm font-medium font-mono">{deal.ours_wallet_address || '-'}</p>
+        ) : (
+          <p className="text-sm font-medium">{deal.ours_bank || '-'} <span className="font-mono text-xs">({deal.ours_account_num || '-'})</span></p>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div data-testid="deals-page">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
@@ -97,7 +148,7 @@ export default function DealsPage() {
               <div className="space-y-1"><Label className="text-xs">Status</Label>
                 <Select value={filter.status} onValueChange={v => setFilter(p => ({ ...p, status: v }))}>
                   <SelectTrigger className="h-8 text-xs" data-testid="filter-status"><SelectValue /></SelectTrigger>
-                  <SelectContent><SelectItem value="all">All</SelectItem><SelectItem value="pending">Pending</SelectItem><SelectItem value="confirmed">Confirmed</SelectItem><SelectItem value="returned">Returned</SelectItem></SelectContent>
+                  <SelectContent><SelectItem value="all">All</SelectItem><SelectItem value="pending">Pending</SelectItem><SelectItem value="confirmed">Confirmed</SelectItem><SelectItem value="returned">Returned</SelectItem><SelectItem value="cancelled">Cancelled</SelectItem></SelectContent>
                 </Select>
               </div>
               <div className="space-y-1"><Label className="text-xs">Client</Label>
@@ -167,11 +218,20 @@ export default function DealsPage() {
         </CardContent>
       </Card>
 
-      <Dialog open={!!sel} onOpenChange={o => { if (!o) setSel(null); }}>
+      {/* Deal Detail Dialog */}
+      <Dialog open={!!sel && !cancelOpen} onOpenChange={o => { if (!o) setSel(null); }}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" data-testid="deal-detail-dialog">
           <DialogHeader><DialogTitle className="text-[#08263e]" style={{ fontFamily: 'Chivo' }}>Deal Details - {sel?.reference_number}</DialogTitle></DialogHeader>
           {sel && (
             <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <Badge className={SB[sel.status] + ' text-xs'}>{sel.status}</Badge>
+                {sel.status === 'pending' && (
+                  <Button size="sm" variant="outline" className="text-red-600 border-red-200 hover:bg-red-50" onClick={() => setCancelOpen(true)} data-testid="cancel-deal-btn">
+                    <Ban className="h-3.5 w-3.5 mr-1.5" /> Cancel / Recall
+                  </Button>
+                )}
+              </div>
               <div className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
                 <DI label="Client" val={sel.client_name} />
                 <DI label="Transaction Type" val={sel.transaction_type} />
@@ -183,8 +243,8 @@ export default function DealsPage() {
                 <DI label={`Currency Amount (${sel.buy_currency})`} val={Number(sel.currency_amount).toLocaleString()} mono />
                 <DI label="Exchange Rate" val={sel.rate} mono />
                 <DI label={`Converted Amount (${sel.sell_currency})`} val={Number(sel.amount).toLocaleString()} mono />
-                <DI label="From" val={`${sel.from_company} / ${sel.from_bank} (${sel.from_account_num})`} />
-                <DI label="To" val={`${sel.to_company} / ${sel.to_bank} (${sel.to_account_num})`} />
+                <AccountInfo deal={sel} prefix="from" label="From" />
+                <AccountInfo deal={sel} prefix="to" label="To" />
                 <DI label="Status" val={sel.status} />
                 <DI label="Created By" val={sel.created_by_name} />
                 {sel.processed_by_name && <DI label="Processed By" val={sel.processed_by_name} />}
@@ -193,8 +253,10 @@ export default function DealsPage() {
               <div className="bg-slate-50 p-3 rounded-md text-center font-mono text-sm font-medium text-[#08263e]">
                 {Number(sel.currency_amount).toLocaleString()} {sel.buy_currency} x {sel.rate} = {Number(sel.amount).toLocaleString()} {sel.sell_currency}
               </div>
-              {sel.remarks && (<><Separator /><div className="bg-slate-50 p-3 rounded-md"><p className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Remarks</p><p className="text-sm">{sel.remarks}</p></div></>)}
+              <OursInfo deal={sel} />
+              {sel.remarks && (<div className="bg-slate-50 p-3 rounded-md"><p className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Remarks</p><p className="text-sm">{sel.remarks}</p></div>)}
               {sel.treasury_remarks && (<div className="bg-blue-50 p-3 rounded-md"><p className="text-[10px] text-blue-400 uppercase tracking-wider mb-1">Treasury Remarks</p><p className="text-sm">{sel.treasury_remarks}</p></div>)}
+              {sel.cancellation_reason && (<div className="bg-red-50 border border-red-200 p-3 rounded-md"><p className="text-[10px] text-red-400 uppercase tracking-wider mb-1">Cancellation Reason</p><p className="text-sm text-red-700">{sel.cancellation_reason}</p></div>)}
 
               <Separator />
               <div>
@@ -229,6 +291,31 @@ export default function DealsPage() {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Cancel Deal Dialog */}
+      <Dialog open={cancelOpen} onOpenChange={o => { if (!o) { setCancelOpen(false); setCancelReason(''); } }}>
+        <DialogContent className="max-w-md" data-testid="cancel-deal-dialog">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600" style={{ fontFamily: 'Chivo' }}>
+              <Ban className="h-5 w-5" /> Cancel / Recall Deal
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-slate-500">
+            You are about to cancel deal <span className="font-mono font-medium">{sel?.reference_number}</span>. This action cannot be undone.
+          </p>
+          <div className="space-y-1.5">
+            <Label className="text-xs">Cancellation Reason <span className="text-red-500">*</span></Label>
+            <Textarea value={cancelReason} onChange={e => setCancelReason(e.target.value)} placeholder="Please explain the reason for cancellation (e.g., client revised transaction amount, duplicate entry, etc.)" rows={4} data-testid="cancel-reason-input" />
+            <p className="text-[10px] text-slate-400">This reason will be visible to the settlements / treasury team.</p>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => { setCancelOpen(false); setCancelReason(''); }} data-testid="cancel-dialog-back-btn">Go Back</Button>
+            <Button className="bg-red-600 hover:bg-red-700 text-white" onClick={handleCancel} disabled={cancelling || !cancelReason.trim()} data-testid="confirm-cancel-deal-btn">
+              {cancelling ? 'Cancelling...' : 'Confirm Cancellation'}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

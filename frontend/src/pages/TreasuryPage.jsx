@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import api from '@/lib/api';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -14,7 +14,12 @@ import { CheckCircle, XCircle, Eye, Filter, X, Image as ImageIcon } from 'lucide
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 
-const SB = { pending: 'bg-yellow-100 text-yellow-800', confirmed: 'bg-green-100 text-green-800', returned: 'bg-red-100 text-red-800' };
+const SB = {
+  pending: 'bg-yellow-100 text-yellow-800',
+  confirmed: 'bg-green-100 text-green-800',
+  returned: 'bg-red-100 text-red-800',
+  cancelled: 'bg-slate-200 text-slate-600',
+};
 
 export default function TreasuryPage() {
   const [deals, setDeals] = useState([]);
@@ -57,6 +62,34 @@ export default function TreasuryPage() {
   const hasFilters = filter.client || filter.currency || filter.date_from || filter.date_to;
   const pending = deals.filter(d => d.status === 'pending');
   const done = deals.filter(d => d.status !== 'pending');
+
+  const AccountInfo = ({ deal, prefix, label }) => {
+    const type = deal[`${prefix}_type`] || 'bank';
+    return (
+      <div>
+        <p className="text-[10px] text-slate-400 uppercase tracking-wider">{label}</p>
+        {type === 'crypto' ? (
+          <p className="text-sm font-medium">{deal[`${prefix}_company`]} / <span className="font-mono text-xs">{deal[`${prefix}_wallet_address`] || '-'}</span></p>
+        ) : (
+          <p className="text-sm font-medium">{deal[`${prefix}_company`] || ''} / {deal[`${prefix}_bank`] || ''} <span className="font-mono text-xs">({deal[`${prefix}_account_num`] || '-'})</span></p>
+        )}
+      </div>
+    );
+  };
+
+  const OursInfo = ({ deal }) => {
+    const type = deal.ours_type || 'bank';
+    return (
+      <div className="bg-yellow-50 border border-yellow-200 p-3 rounded-md">
+        <p className="text-[10px] text-yellow-700 uppercase tracking-wider font-semibold mb-1">Ours (Receiving Account)</p>
+        {type === 'crypto' ? (
+          <p className="text-sm font-medium font-mono">{deal.ours_wallet_address || '-'}</p>
+        ) : (
+          <p className="text-sm font-medium">{deal.ours_bank || '-'} <span className="font-mono text-xs">({deal.ours_account_num || '-'})</span></p>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div data-testid="treasury-page">
@@ -136,7 +169,7 @@ export default function TreasuryPage() {
                     <TableCell className="font-mono text-xs">{d.buy_currency}/{d.sell_currency}</TableCell>
                     <TableCell className="text-right font-mono text-xs">{Number(d.amount).toLocaleString()}</TableCell>
                     <TableCell><Badge className={SB[d.status]}>{d.status}</Badge></TableCell>
-                    <TableCell className="text-sm">{d.processed_by_name}</TableCell>
+                    <TableCell className="text-sm">{d.processed_by_name || '-'}</TableCell>
                     <TableCell className="text-xs">{d.processed_at ? format(new Date(d.processed_at), 'dd MMM yyyy HH:mm') : '-'}</TableCell>
                   </TableRow>
                 ))}</TableBody>
@@ -150,6 +183,7 @@ export default function TreasuryPage() {
           <DialogHeader><DialogTitle style={{ fontFamily: 'Chivo' }} className="text-[#08263e]">Review Deal - {sel?.reference_number}</DialogTitle></DialogHeader>
           {sel && (
             <div className="space-y-4">
+              <Badge className={SB[sel.status] + ' text-xs'}>{sel.status}</Badge>
               <div className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
                 <Info label="Client" val={sel.client_name} />
                 <Info label="Transaction Type" val={sel.transaction_type} />
@@ -161,11 +195,13 @@ export default function TreasuryPage() {
                 <Info label="Rate" val={sel.rate} mono />
                 <Info label="Deal Date" val={format(new Date(sel.deal_date + 'T00:00:00'), 'dd MMM yyyy')} />
                 <Info label="Value Date" val={format(new Date(sel.value_date + 'T00:00:00'), 'dd MMM yyyy')} />
-                <Info label="From" val={`${sel.from_company} / ${sel.from_bank} (${sel.from_account_num})`} />
-                <Info label="To" val={`${sel.to_company} / ${sel.to_bank} (${sel.to_account_num})`} />
+                <AccountInfo deal={sel} prefix="from" label="From" />
+                <AccountInfo deal={sel} prefix="to" label="To" />
                 <Info label="Trader" val={sel.created_by_name} />
               </div>
+              <OursInfo deal={sel} />
               {sel.remarks && (<div className="bg-slate-50 p-3 rounded-md"><p className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Trader Remarks</p><p className="text-sm">{sel.remarks}</p></div>)}
+              {sel.cancellation_reason && (<div className="bg-red-50 border border-red-200 p-3 rounded-md"><p className="text-[10px] text-red-400 uppercase tracking-wider mb-1">Cancellation Reason</p><p className="text-sm text-red-700">{sel.cancellation_reason}</p></div>)}
 
               {sel.settlement_proofs?.length > 0 && (
                 <>
@@ -184,18 +220,29 @@ export default function TreasuryPage() {
                 </>
               )}
 
-              <Separator />
-              <div className="space-y-1.5">
-                <Label className="text-xs">Treasury Remarks</Label>
-                <Textarea value={remarks} onChange={e => setRemarks(e.target.value)} placeholder="Add your remarks..." rows={3} data-testid="treasury-remarks-input" />
-              </div>
+              {sel.status === 'pending' && (
+                <>
+                  <Separator />
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Treasury Remarks</Label>
+                    <Textarea value={remarks} onChange={e => setRemarks(e.target.value)} placeholder="Add your remarks..." rows={3} data-testid="treasury-remarks-input" />
+                  </div>
+                </>
+              )}
             </div>
           )}
-          <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setSel(null)} data-testid="cancel-review-btn">Cancel</Button>
-            <Button className="bg-[#ec474e] hover:bg-[#ec474e]/90 text-white" onClick={() => process('returned')} disabled={processing} data-testid="return-deal-btn"><XCircle className="h-4 w-4 mr-2" /> Return</Button>
-            <Button className="bg-[#10b981] hover:bg-[#10b981]/90 text-white" onClick={() => process('confirmed')} disabled={processing} data-testid="confirm-deal-btn"><CheckCircle className="h-4 w-4 mr-2" /> Confirm</Button>
-          </DialogFooter>
+          {sel?.status === 'pending' && (
+            <DialogFooter className="gap-2">
+              <Button variant="outline" onClick={() => setSel(null)} data-testid="cancel-review-btn">Cancel</Button>
+              <Button className="bg-[#ec474e] hover:bg-[#ec474e]/90 text-white" onClick={() => process('returned')} disabled={processing} data-testid="return-deal-btn"><XCircle className="h-4 w-4 mr-2" /> Return</Button>
+              <Button className="bg-[#10b981] hover:bg-[#10b981]/90 text-white" onClick={() => process('confirmed')} disabled={processing} data-testid="confirm-deal-btn"><CheckCircle className="h-4 w-4 mr-2" /> Confirm</Button>
+            </DialogFooter>
+          )}
+          {sel?.status !== 'pending' && (
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setSel(null)}>Close</Button>
+            </DialogFooter>
+          )}
         </DialogContent>
       </Dialog>
     </div>

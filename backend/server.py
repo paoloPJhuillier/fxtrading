@@ -95,12 +95,20 @@ class DealCreate(BaseModel):
     deal_date: str
     transfer_type: str
     client_name: str
+    from_type: str  # "bank" or "crypto"
     from_company: str
-    from_bank: str
-    from_account_num: str
+    from_bank: Optional[str] = ""
+    from_account_num: Optional[str] = ""
+    from_wallet_address: Optional[str] = ""
+    to_type: str  # "bank" or "crypto"
     to_company: str
-    to_bank: str
-    to_account_num: str
+    to_bank: Optional[str] = ""
+    to_account_num: Optional[str] = ""
+    to_wallet_address: Optional[str] = ""
+    ours_type: str  # "bank" or "crypto"
+    ours_bank: Optional[str] = ""
+    ours_account_num: Optional[str] = ""
+    ours_wallet_address: Optional[str] = ""
     buy_currency: str
     sell_currency: str
     currency_amount: float
@@ -111,6 +119,9 @@ class DealCreate(BaseModel):
 class DealProcess(BaseModel):
     status: str
     treasury_remarks: Optional[str] = ""
+
+class DealCancel(BaseModel):
+    cancellation_reason: str
 
 class ReferenceItemCreate(BaseModel):
     name: str
@@ -350,6 +361,28 @@ async def process_deal(deal_id: str, req: DealProcess, user=Depends(get_current_
     updated = await db.deals.find_one({"id": deal_id}, {"_id": 0})
     return updated
 
+@api_router.put("/deals/{deal_id}/cancel")
+async def cancel_deal(deal_id: str, req: DealCancel, user=Depends(get_current_user)):
+    await require_role(user, ["trader"])
+    if not req.cancellation_reason.strip():
+        raise HTTPException(status_code=400, detail="Cancellation reason is required")
+    deal = await db.deals.find_one({"id": deal_id}, {"_id": 0})
+    if not deal:
+        raise HTTPException(status_code=404, detail="Deal not found")
+    if deal["created_by"] != user["id"]:
+        raise HTTPException(status_code=403, detail="You can only cancel your own deals")
+    if deal["status"] != "pending":
+        raise HTTPException(status_code=400, detail="Only pending deals can be cancelled")
+    update = {
+        "status": "cancelled",
+        "cancellation_reason": req.cancellation_reason,
+        "cancelled_at": datetime.now(timezone.utc).isoformat(),
+        "updated_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.deals.update_one({"id": deal_id}, {"$set": update})
+    updated = await db.deals.find_one({"id": deal_id}, {"_id": 0})
+    return updated
+
 
 # --- Reference Data ---
 COLLECTION_MAP = {
@@ -436,6 +469,7 @@ async def get_dashboard_stats(date_range: str = Query("30d", alias="range"), use
     pending = sum(1 for d in deals if d["status"] == "pending")
     confirmed = sum(1 for d in deals if d["status"] == "confirmed")
     returned = sum(1 for d in deals if d["status"] == "returned")
+    cancelled = sum(1 for d in deals if d["status"] == "cancelled")
     total_volume = sum(float(d.get("amount", 0)) for d in deals)
 
     deals_by_date = {}
@@ -461,6 +495,7 @@ async def get_dashboard_stats(date_range: str = Query("30d", alias="range"), use
         "pending_deals": pending,
         "confirmed_deals": confirmed,
         "returned_deals": returned,
+        "cancelled_deals": cancelled,
         "total_volume": total_volume,
         "deals_by_date": sorted(deals_by_date.values(), key=lambda x: x["date"]),
         "deals_by_currency": sorted(deals_by_currency.values(), key=lambda x: x["volume"], reverse=True)[:10],
@@ -548,17 +583,23 @@ async def seed_data():
         await db.currencies.insert_many(currencies)
         logger.info(f"Seeded {len(currencies)} currencies")
 
-    # Transaction types
-    if await db.transaction_types.count_documents({}) == 0:
-        types = [("Spot", "SPOT"), ("Forward", "FWD"), ("Swap", "SWAP"), ("NDF", "NDF"), ("Option", "OPT")]
+    # Transaction types - always reseed with correct values
+    existing_tx = await db.transaction_types.find_one({"name": "Today"})
+    if not existing_tx:
+        await db.transaction_types.delete_many({})
+        types = [("Today", "TODAY"), ("Tomorrow", "TOM"), ("Spot", "SPOT")]
         docs = [{"id": str(uuid.uuid4()), "name": n, "code": c, "is_active": True, "created_at": datetime.now(timezone.utc).isoformat()} for n, c in types]
         await db.transaction_types.insert_many(docs)
+        logger.info("Reseeded transaction types")
 
-    # Transfer types
-    if await db.transfer_types.count_documents({}) == 0:
-        types = [("Wire Transfer", "WIRE"), ("SWIFT", "SWIFT"), ("Internal Transfer", "INT"), ("ACH", "ACH"), ("RTGS", "RTGS")]
+    # Transfer types - always reseed with correct values
+    existing_tf = await db.transfer_types.find_one({"name": "FX Crypto Conversion"})
+    if not existing_tf:
+        await db.transfer_types.delete_many({})
+        types = [("FX Crypto Conversion", "FX_CRYPTO"), ("FX Local", "FX_LOCAL"), ("PDAX Withdrawal", "PDAX_WD")]
         docs = [{"id": str(uuid.uuid4()), "name": n, "code": c, "is_active": True, "created_at": datetime.now(timezone.utc).isoformat()} for n, c in types]
         await db.transfer_types.insert_many(docs)
+        logger.info("Reseeded transfer types")
 
     # Companies
     if await db.companies.count_documents({}) == 0:

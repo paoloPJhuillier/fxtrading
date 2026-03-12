@@ -1,0 +1,120 @@
+{
+  "summary": "Comprehensive testing of 5 new FX Trading Tracker enhancements: (1) Cancel/Recall with mandatory reason, (2) Transaction types Today/Tomorrow/Spot, (3) Transfer types FX Crypto Conversion/FX Local/PDAX Withdrawal, (4) Bank vs Crypto toggle on From/To sections, (5) Ours (Receiving Account) section. All 18 backend API tests passed. All frontend UI tests passed via Playwright.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "passed_tests": [
+    "Backend: Transaction types list returns Today, Tomorrow, Spot",
+    "Backend: Transfer types list returns FX Crypto Conversion, FX Local, PDAX Withdrawal",
+    "Backend: Create deal with Bank type for From section - bank/account saved",
+    "Backend: Create deal with Crypto type for From section - wallet address saved",
+    "Backend: Create deal with mixed types (Bank From, Crypto To)",
+    "Backend: Create deal with Ours Bank type - bank/account saved",
+    "Backend: Create deal with Ours Crypto type - wallet address saved",
+    "Backend: Deal detail returns all Ours section fields",
+    "Backend: Cancel without reason returns 400",
+    "Backend: Cancel with whitespace-only reason returns 400",
+    "Backend: Cancel deal success - status becomes cancelled, cancellation_reason saved",
+    "Backend: Cancel already-cancelled deal returns 400",
+    "Backend: Cancel confirmed deal returns 400",
+    "Backend: Deal detail shows cancellation_reason for cancelled deals",
+    "Backend: Treasury cannot cancel deals (403)",
+    "Backend: Filter by cancelled status works correctly",
+    "Backend: Dashboard stats includes cancelled_deals count",
+    "Frontend: Transaction Type dropdown shows Today, Tomorrow, Spot",
+    "Frontend: Transfer Type dropdown shows FX Crypto Conversion, FX Local, PDAX Withdrawal",
+    "Frontend: Bank/Crypto toggle on Source (From) section - Bank shows Bank+Account, Crypto shows Wallet Address",
+    "Frontend: Bank/Crypto toggle on Destination (To) section - Bank shows Bank+Account, Crypto shows Wallet Address",
+    "Frontend: Ours (Receiving Account) section visible on New Deal form with Bank/Crypto toggle",
+    "Frontend: Cancel/Recall button visible in deal detail dialog for pending deals",
+    "Frontend: Cancel dialog has mandatory cancellation reason field",
+    "Frontend: Confirm Cancellation button disabled when reason is empty",
+    "Frontend: Confirm Cancellation button enabled when reason is entered",
+    "Frontend: Cancelled deal detail shows cancellation reason in red section",
+    "Frontend: Ours section displayed in yellow highlight in deal detail",
+    "Frontend: Treasury view shows Ours section in review dialog",
+    "Frontend: Treasury Processed tab shows cancelled status badge",
+    "Frontend: Filter by cancelled status works in My Deals page"
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_enhancements.py",
+    "/app/test_reports/pytest/enhancement_tests.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [],
+  "updated_files": [
+    "/app/backend/tests/test_enhancements.py"
+  ],
+  "success_rate": {
+    "backend": "100% (18/18 pytest tests passed)",
+    "frontend": "100% (All 5 enhancements verified via Playwright)"
+  },
+  "test_credentials": {
+    "trader": "trader@fxtracker.com / Trader@123",
+    "treasury": "treasury@fxtracker.com / Treasury@123",
+    "admin": "admin@fxtracker.com / Admin@123"
+  },
+  "seed_data_creation": "Multiple test deals created with TEST_ prefix for various scenarios: Bank type, Crypto type, mixed types, cancel testing, filter testing",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "All 5 new enhancements have been fully tested. Backend tests at /app/backend/tests/test_enhancements.py cover: transaction types, transfer types, bank/crypto toggles, ours section, cancel/recall functionality. The DealCreate model includes: from_type, to_type, ours_type (bank/crypto), from_wallet_address, to_wallet_address, ours_wallet_address, ours_bank, ours_account_num, cancellation_reason, cancelled_at. Cancel endpoint at PUT /api/deals/{deal_id}/cancel requires cancellation_reason in body.",
+  "features_tested": {
+    "enhancement_1_cancel_recall": {
+      "status": "PASSED",
+      "details": "Cancel/Recall button appears for pending deals in deal detail dialog. Cancel dialog requires mandatory cancellation reason. Cancel without reason returns 400. Cancel already-cancelled or confirmed deal returns 400. Treasury cannot cancel deals (403). Cancellation reason displayed in deal detail after cancellation. cancelled_at timestamp recorded."
+    },
+    "enhancement_2_transaction_types": {
+      "status": "PASSED",
+      "details": "Transaction Type dropdown shows exactly: Today, Tomorrow, Spot. Old transaction types removed. API /api/reference/transaction-types returns correct values."
+    },
+    "enhancement_3_transfer_types": {
+      "status": "PASSED",
+      "details": "Transfer Type dropdown shows exactly: FX Crypto Conversion, FX Local, PDAX Withdrawal. Old transfer types removed. API /api/reference/transfer-types returns correct values."
+    },
+    "enhancement_4_bank_crypto_toggle": {
+      "status": "PASSED",
+      "details": "Bank/Crypto toggle present on Source (From) and Destination (To) sections. Bank mode shows Company, Bank dropdown, Account Number fields. Crypto mode shows Company, Wallet Address field (Bank and Account Number hidden). Toggle resets dependent fields when switched. DealCreate model has from_type, to_type fields with conditional validation."
+    },
+    "enhancement_5_ours_section": {
+      "status": "PASSED",
+      "details": "Ours (Receiving Account) section added to New Deal form with Bank/Crypto toggle. Bank mode shows Bank dropdown + Account Number. Crypto mode shows Wallet Address. Section highlighted in yellow in deal detail and treasury review dialogs. API stores ours_type, ours_bank, ours_account_num, ours_wallet_address."
+    }
+  },
+  "backend_api_coverage": {
+    "cancel_deal_endpoint": {
+      "endpoint": "PUT /api/deals/{deal_id}/cancel",
+      "request_body": {"cancellation_reason": "string (required)"},
+      "success_response": "200 - Deal with status=cancelled, cancellation_reason, cancelled_at",
+      "error_responses": [
+        "400 - Empty or whitespace-only reason",
+        "400 - Deal already cancelled or not pending",
+        "403 - Treasury user trying to cancel",
+        "404 - Deal not found"
+      ]
+    },
+    "transaction_types": {
+      "endpoint": "GET /api/reference/transaction-types",
+      "values": ["Today", "Tomorrow", "Spot"]
+    },
+    "transfer_types": {
+      "endpoint": "GET /api/reference/transfer-types",
+      "values": ["FX Crypto Conversion", "FX Local", "PDAX Withdrawal"]
+    },
+    "deal_create_new_fields": [
+      "from_type: bank|crypto",
+      "to_type: bank|crypto",
+      "ours_type: bank|crypto",
+      "from_wallet_address: string (when from_type=crypto)",
+      "to_wallet_address: string (when to_type=crypto)",
+      "ours_wallet_address: string (when ours_type=crypto)",
+      "ours_bank: string (when ours_type=bank)",
+      "ours_account_num: string (when ours_type=bank)"
+    ]
+  }
+}
