@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, memo, useMemo } from 'react';
+import { useState, useEffect, useCallback, useRef, memo, useMemo } from 'react';
 import api from '@/lib/api';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -23,7 +23,10 @@ export default function TransactionHistoryPage() {
   const [page, setPage] = useState(1);
   const [showFilters, setShowFilters] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [sel, setSel] = useState(null);
+  const [_sel, _setSel] = useState(null);
+  const selRef = useRef(null);
+  if (_sel) selRef.current = _sel;
+  const sel = _sel || selRef.current;
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedFilter(filter), 400);
@@ -72,7 +75,7 @@ export default function TransactionHistoryPage() {
     } catch (e) { console.error('Export failed', e); }
   };
 
-  const viewDeal = useCallback((deal) => setSel(deal), []);
+  const viewDeal = useCallback((deal) => _setSel(deal), []);
 
   return (
     <div data-testid="transaction-history-page">
@@ -159,7 +162,7 @@ export default function TransactionHistoryPage() {
         </div>
       )}
 
-      <Dialog open={!!sel} onOpenChange={o => !o && setSel(null)}>
+      <Dialog open={!!_sel} onOpenChange={o => !o && _setSel(null)}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" data-testid="tx-detail-dialog">
           <DialogHeader><DialogTitle style={{ fontFamily: 'Chivo' }} className="text-[#08263e]">Deal Details - {sel?.reference_number}</DialogTitle></DialogHeader>
           {sel && (

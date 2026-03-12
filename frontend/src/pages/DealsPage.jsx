@@ -31,7 +31,10 @@ export default function DealsPage() {
   const [page, setPage] = useState(1);
   const [showFilters, setShowFilters] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [sel, setSel] = useState(null);
+  const [_sel, _setSel] = useState(null);
+  const selRef = useRef(null);
+  if (_sel) selRef.current = _sel;
+  const sel = _sel || selRef.current;
   const [cancelOpen, setCancelOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
   const [cancelling, setCancelling] = useState(false);
@@ -93,7 +96,7 @@ export default function DealsPage() {
     try {
       await api.put(`/deals/${sel.id}/cancel`, { cancellation_reason: cancelReason });
       toast.success('Deal cancelled successfully');
-      setCancelOpen(false); setCancelReason(''); setSel(null); fetchDeals();
+      setCancelOpen(false); setCancelReason(''); _setSel(null); fetchDeals();
     } catch (err) { toast.error(err.response?.data?.detail || 'Cancel failed'); }
     finally { setCancelling(false); }
   };
@@ -108,7 +111,7 @@ export default function DealsPage() {
         await api.post(`/deals/${sel.id}/upload`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
       }
       const res = await api.get(`/deals/${sel.id}`);
-      setSel(res.data);
+      _setSel(res.data);
       toast.success('Proof of payment uploaded');
     } catch (err) { toast.error(err.response?.data?.detail || 'Upload failed'); }
     finally { setUploading(false); e.target.value = ''; }
@@ -119,7 +122,7 @@ export default function DealsPage() {
     try {
       await api.delete(`/deals/${sel.id}/proofs/${proofId}`);
       const res = await api.get(`/deals/${sel.id}`);
-      setSel(res.data);
+      _setSel(res.data);
       toast.success('Proof removed');
     } catch (err) { toast.error('Delete failed'); }
   };
@@ -130,14 +133,14 @@ export default function DealsPage() {
     try {
       await api.put(`/deals/${sel.id}/resubmit`);
       toast.success('Deal resubmitted for review');
-      setSel(null); fetchDeals();
+      _setSel(null); fetchDeals();
     } catch (err) { toast.error(err.response?.data?.detail || 'Resubmit failed'); }
     finally { setResubmitting(false); }
   };
 
   const viewDeal = useCallback(async (dealId) => {
     const r = await api.get(`/deals/${dealId}`);
-    setSel(r.data);
+    _setSel(r.data);
   }, []);
 
   return (
@@ -233,7 +236,7 @@ export default function DealsPage() {
       )}
 
       {/* Deal Detail Dialog */}
-      <Dialog open={!!sel && !cancelOpen} onOpenChange={o => { if (!o) setSel(null); }}>
+      <Dialog open={!!_sel && !cancelOpen} onOpenChange={o => { if (!o) _setSel(null); }}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" data-testid="deal-detail-dialog">
           <DialogHeader><DialogTitle className="text-[#08263e]" style={{ fontFamily: 'Chivo' }}>Deal Details - {sel?.reference_number}</DialogTitle></DialogHeader>
           {sel && (

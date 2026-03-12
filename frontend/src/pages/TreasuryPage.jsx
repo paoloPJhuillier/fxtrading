@@ -25,7 +25,10 @@ const PAGE_SIZE = 20;
 
 export default function TreasuryPage() {
   const [data, setData] = useState({ deals: [], total: 0, page: 1, pages: 1 });
-  const [sel, setSel] = useState(null);
+  const [_sel, _setSel] = useState(null);
+  const selRef = useRef(null);
+  if (_sel) selRef.current = _sel;
+  const sel = _sel || selRef.current;
   const [remarks, setRemarks] = useState('');
   const [processing, setProcessing] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -72,7 +75,7 @@ export default function TreasuryPage() {
     try {
       await api.put(`/deals/${sel.id}/process`, { status: confirmAction, treasury_remarks: remarks });
       toast.success(`Deal ${confirmAction === 'confirmed' ? 'confirmed' : 'returned'}`);
-      setConfirmAction(null); setSel(null); setRemarks(''); load();
+      setConfirmAction(null); _setSel(null); setRemarks(''); load();
     } catch (e) { toast.error(e.response?.data?.detail || 'Failed'); }
     finally { setProcessing(false); setConfirmAction(null); }
   };
@@ -91,7 +94,7 @@ export default function TreasuryPage() {
         await api.post(`/deals/${sel.id}/upload`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
       }
       const res = await api.get(`/deals/${sel.id}`);
-      setSel(res.data);
+      _setSel(res.data);
       toast.success('Settlement proof uploaded');
     } catch (err) { toast.error(err.response?.data?.detail || 'Upload failed'); }
     finally { setUploading(false); e.target.value = ''; }
@@ -102,7 +105,7 @@ export default function TreasuryPage() {
     try {
       await api.delete(`/deals/${sel.id}/proofs/${proofId}`);
       const res = await api.get(`/deals/${sel.id}`);
-      setSel(res.data);
+      _setSel(res.data);
       toast.success('Proof removed');
     } catch (err) { toast.error('Delete failed'); }
   };
@@ -110,7 +113,7 @@ export default function TreasuryPage() {
   const pending = useMemo(() => data.deals.filter(d => d.status === 'pending'), [data.deals]);
   const done = useMemo(() => data.deals.filter(d => d.status !== 'pending'), [data.deals]);
 
-  const openReview = useCallback((d) => { setSel(d); setRemarks(''); }, []);
+  const openReview = useCallback((d) => { _setSel(d); setRemarks(''); }, []);
 
   return (
     <div data-testid="treasury-page">
@@ -202,7 +205,7 @@ export default function TreasuryPage() {
       )}
 
       {/* Review Deal Dialog */}
-      <Dialog open={!!sel && !confirmAction} onOpenChange={o => !o && setSel(null)}>
+      <Dialog open={!!_sel && !confirmAction} onOpenChange={o => !o && _setSel(null)}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" data-testid="process-deal-dialog">
           <DialogHeader><DialogTitle style={{ fontFamily: 'Chivo' }} className="text-[#08263e]">Review Deal - {sel?.reference_number}</DialogTitle></DialogHeader>
           {sel && (
@@ -272,13 +275,13 @@ export default function TreasuryPage() {
           )}
           {sel?.status === 'pending' && (
             <DialogFooter className="gap-2">
-              <Button variant="outline" onClick={() => setSel(null)} data-testid="cancel-review-btn">Cancel</Button>
+              <Button variant="outline" onClick={() => _setSel(null)} data-testid="cancel-review-btn">Cancel</Button>
               <Button className="bg-[#ec474e] hover:bg-[#ec474e]/90 text-white" onClick={() => tryProcess('returned')} disabled={processing} data-testid="return-deal-btn"><XCircle className="h-4 w-4 mr-2" /> Return</Button>
               <Button className="bg-[#10b981] hover:bg-[#10b981]/90 text-white" onClick={() => tryProcess('confirmed')} disabled={processing} data-testid="confirm-deal-btn"><CheckCircle className="h-4 w-4 mr-2" /> Confirm</Button>
             </DialogFooter>
           )}
           {sel?.status !== 'pending' && (
-            <DialogFooter><Button variant="outline" onClick={() => setSel(null)}>Close</Button></DialogFooter>
+            <DialogFooter><Button variant="outline" onClick={() => _setSel(null)}>Close</Button></DialogFooter>
           )}
         </DialogContent>
       </Dialog>

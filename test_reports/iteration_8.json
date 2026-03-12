@@ -1,0 +1,67 @@
+{
+  "summary": "Complete testing of dialog close overlay fix. All modal dialogs across 4 pages (DealsPage, TreasuryPage, TransactionHistoryPage, UsersPage) open and close smoothly without visible black overlay flash. The useRef pattern correctly preserves dialog content during exit animation. No stale data issues, table data intact after all operations.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "passed_tests": [
+    "DealsPage: Deal detail dialog opens in ~45ms",
+    "DealsPage: Dialog closes cleanly with ESC key without overlay flash",
+    "DealsPage: Opening different deal shows NEW deal data (no stale data from selRef)",
+    "DealsPage: Cancel dialog transition smooth - opens from deal detail without flash",
+    "DealsPage: Go Back from cancel dialog returns to deal detail smoothly",
+    "DealsPage: Table data intact after multiple dialog open/close cycles (20 rows)",
+    "TreasuryPage: Review dialog opens in ~454ms",
+    "TreasuryPage: Confirmation prompt opens smoothly from review dialog",
+    "TreasuryPage: Go Back from confirmation returns to review dialog without flash",
+    "TreasuryPage: Review dialog closes cleanly without overlay flash",
+    "TreasuryPage: Table data intact (8 pending deals)",
+    "TransactionHistoryPage: Transaction detail dialog opens in ~430ms",
+    "TransactionHistoryPage: Dialog closes cleanly without overlay flash",
+    "TransactionHistoryPage: Different transaction shows correct data (no stale data)",
+    "TransactionHistoryPage: Table data intact (20 rows)",
+    "UsersPage: Edit user dialog opens in ~419ms",
+    "UsersPage: Dialog closes cleanly with Cancel button without overlay flash",
+    "UsersPage: Add user dialog opens in ~393ms",
+    "UsersPage: Table data intact (3 users)",
+    "CSV Export: Export button functional on DealsPage",
+    "Pagination: Works correctly (37 deals across 2 pages)",
+    "Multiple cycles: 5 consecutive dialog open/close cycles without stale data or errors"
+  ],
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Dialog overlay opacity correctly reduced from bg-black/80 to bg-black/40 in dialog.jsx",
+    "Animation duration correctly set to duration-150 (150ms) for both overlay and content",
+    "useRef pattern in DealsPage (_sel/_setSel with selRef) correctly preserves content during exit animation",
+    "Same ref pattern correctly implemented in TreasuryPage and TransactionHistoryPage",
+    "UsersPage uses separate open/edit state - no ref needed, works correctly",
+    "Opening different deal after close shows NEW deal data (selRef.current updated when _sel changes)"
+  ],
+  "updated_files": [],
+  "success_rate": {
+    "backend": "N/A (frontend-only testing)",
+    "frontend": "100% (All 22 dialog close tests passed)"
+  },
+  "test_credentials": {
+    "trader": "trader@fxtracker.com / Trader@123",
+    "treasury": "treasury@fxtracker.com / Treasury@123",
+    "admin": "admin@fxtracker.com / Admin@123"
+  },
+  "seed_data_creation": "Used existing 37 deals, 3 users",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Dialog close overlay fix verified. Key implementation: dialog.jsx uses bg-black/40 overlay (reduced from bg-black/80) with duration-150 animation. DealsPage, TreasuryPage, TransactionHistoryPage use useRef pattern (_sel/_setSel with selRef) to keep dialog content visible during exit animation. Dialog open prop uses _sel (so it starts closing when null) while content uses sel (derived from ref, so content stays visible during fade-out). UsersPage uses separate open/edit state without ref pattern. All tested pages: /deals, /treasury, /transactions, /users. No black flash/overlay artifact observed during close animations.",
+  "dialog_close_fix_details": {
+    "overlay_opacity": "bg-black/40 (was bg-black/80)",
+    "animation_duration": "150ms (was 200ms)",
+    "ref_pattern_pages": ["DealsPage", "TreasuryPage", "TransactionHistoryPage"],
+    "no_ref_pattern_pages": ["UsersPage"],
+    "visual_result": "Smooth fade-out with content visible during animation, no black flash"
+  }
+}
