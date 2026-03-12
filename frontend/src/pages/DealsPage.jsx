@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '@/lib/api';
 import { Card, CardContent } from '@/components/ui/card';
@@ -11,7 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Separator } from '@/components/ui/separator';
-import { Plus, FileText, Eye, Filter, X, Upload, Trash2, Image as ImageIcon, Ban } from 'lucide-react';
+import { Plus, FileText, Eye, Filter, X, Ban, Image as ImageIcon } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 
@@ -28,11 +28,9 @@ export default function DealsPage() {
   const [showFilters, setShowFilters] = useState(false);
   const [loading, setLoading] = useState(true);
   const [sel, setSel] = useState(null);
-  const [uploading, setUploading] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
   const [cancelling, setCancelling] = useState(false);
-  const fileRef = useRef(null);
   const navigate = useNavigate();
 
   const fetchDeals = useCallback(async () => {
@@ -55,32 +53,6 @@ export default function DealsPage() {
 
   const clearFilters = () => setFilter({ status: 'all', client: '', currency: '', date_from: '', date_to: '' });
   const hasFilters = filter.status !== 'all' || filter.client || filter.currency || filter.date_from || filter.date_to;
-
-  const uploadProof = async (e) => {
-    if (!sel || !e.target.files?.length) return;
-    setUploading(true);
-    try {
-      for (const file of e.target.files) {
-        const fd = new FormData();
-        fd.append('file', file);
-        await api.post(`/deals/${sel.id}/upload`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
-      }
-      const res = await api.get(`/deals/${sel.id}`);
-      setSel(res.data);
-      toast.success('Settlement proof uploaded');
-    } catch (err) { toast.error(err.response?.data?.detail || 'Upload failed'); }
-    finally { setUploading(false); e.target.value = ''; }
-  };
-
-  const deleteProof = async (proofId) => {
-    if (!sel) return;
-    try {
-      await api.delete(`/deals/${sel.id}/proofs/${proofId}`);
-      const res = await api.get(`/deals/${sel.id}`);
-      setSel(res.data);
-      toast.success('Proof removed');
-    } catch (err) { toast.error('Delete failed'); }
-  };
 
   const handleCancel = async () => {
     if (!cancelReason.trim()) { toast.error('Cancellation reason is required'); return; }
@@ -260,24 +232,14 @@ export default function DealsPage() {
 
               <Separator />
               <div>
-                <div className="flex items-center justify-between mb-3">
-                  <p className="text-xs font-medium text-slate-600 uppercase tracking-wider">Settlement Proofs</p>
-                  <div>
-                    <input type="file" ref={fileRef} className="hidden" accept="image/*" multiple onChange={uploadProof} />
-                    <Button size="sm" variant="outline" onClick={() => fileRef.current?.click()} disabled={uploading} data-testid="upload-proof-btn">
-                      <Upload className="h-3 w-3 mr-1.5" /> {uploading ? 'Uploading...' : 'Upload Image'}
-                    </Button>
-                  </div>
-                </div>
+                <p className="text-xs font-medium text-slate-600 uppercase tracking-wider mb-3">Settlement Proofs</p>
                 {sel.settlement_proofs?.length > 0 ? (
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                     {sel.settlement_proofs.map(p => (
                       <div key={p.id} className="relative group border rounded-lg overflow-hidden">
-                        <img src={`${process.env.REACT_APP_BACKEND_URL}/api/files/${p.path}`} alt={p.filename} className="w-full h-28 object-cover" />
-                        <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                          <a href={`${process.env.REACT_APP_BACKEND_URL}/api/files/${p.path}`} target="_blank" rel="noopener noreferrer" className="text-white"><Eye className="h-4 w-4" /></a>
-                          <button onClick={() => deleteProof(p.id)} className="text-white hover:text-red-300"><Trash2 className="h-4 w-4" /></button>
-                        </div>
+                        <a href={`${process.env.REACT_APP_BACKEND_URL}/api/files/${p.path}`} target="_blank" rel="noopener noreferrer">
+                          <img src={`${process.env.REACT_APP_BACKEND_URL}/api/files/${p.path}`} alt={p.filename} className="w-full h-28 object-cover" />
+                        </a>
                         <p className="text-[10px] text-slate-500 p-1.5 truncate">{p.filename}</p>
                       </div>
                     ))}

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import api from '@/lib/api';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -10,7 +10,7 @@ import { Separator } from '@/components/ui/separator';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { CheckCircle, XCircle, Eye, Filter, X, Image as ImageIcon, AlertTriangle } from 'lucide-react';
+import { CheckCircle, XCircle, Eye, Filter, X, Image as ImageIcon, AlertTriangle, Upload, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 
@@ -31,6 +31,8 @@ export default function TreasuryPage() {
   const [tab, setTab] = useState('pending');
   const [showFilters, setShowFilters] = useState(false);
   const [filter, setFilter] = useState({ client: '', currency: '', date_from: '', date_to: '' });
+  const [uploading, setUploading] = useState(false);
+  const fileRef = useRef(null);
 
   const load = useCallback(async () => {
     try {
@@ -66,6 +68,33 @@ export default function TreasuryPage() {
 
   const clearFilters = () => setFilter({ client: '', currency: '', date_from: '', date_to: '' });
   const hasFilters = filter.client || filter.currency || filter.date_from || filter.date_to;
+
+  const uploadProof = async (e) => {
+    if (!sel || !e.target.files?.length) return;
+    setUploading(true);
+    try {
+      for (const file of e.target.files) {
+        const fd = new FormData();
+        fd.append('file', file);
+        await api.post(`/deals/${sel.id}/upload`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+      }
+      const res = await api.get(`/deals/${sel.id}`);
+      setSel(res.data);
+      toast.success('Settlement proof uploaded');
+    } catch (err) { toast.error(err.response?.data?.detail || 'Upload failed'); }
+    finally { setUploading(false); e.target.value = ''; }
+  };
+
+  const deleteProof = async (proofId) => {
+    if (!sel) return;
+    try {
+      await api.delete(`/deals/${sel.id}/proofs/${proofId}`);
+      const res = await api.get(`/deals/${sel.id}`);
+      setSel(res.data);
+      toast.success('Proof removed');
+    } catch (err) { toast.error('Delete failed'); }
+  };
+
   const pending = deals.filter(d => d.status === 'pending');
   const done = deals.filter(d => d.status !== 'pending');
 
@@ -209,22 +238,37 @@ export default function TreasuryPage() {
               {sel.remarks && (<div className="bg-slate-50 p-3 rounded-md"><p className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Trader Remarks</p><p className="text-sm">{sel.remarks}</p></div>)}
               {sel.cancellation_reason && (<div className="bg-red-50 border border-red-200 p-3 rounded-md"><p className="text-[10px] text-red-400 uppercase tracking-wider mb-1">Cancellation Reason</p><p className="text-sm text-red-700">{sel.cancellation_reason}</p></div>)}
 
-              {sel.settlement_proofs?.length > 0 && (
-                <>
-                  <Separator />
+              <Separator />
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-xs font-medium text-slate-600 uppercase tracking-wider">Settlement Proofs</p>
                   <div>
-                    <p className="text-xs font-medium text-slate-600 uppercase tracking-wider mb-2">Settlement Proofs</p>
-                    <div className="grid grid-cols-3 gap-2">
-                      {sel.settlement_proofs.map(p => (
-                        <a key={p.id} href={`${process.env.REACT_APP_BACKEND_URL}/api/files/${p.path}`} target="_blank" rel="noopener noreferrer" className="block border rounded overflow-hidden hover:ring-2 ring-[#518dca]">
-                          <img src={`${process.env.REACT_APP_BACKEND_URL}/api/files/${p.path}`} alt={p.filename} className="w-full h-20 object-cover" />
-                          <p className="text-[10px] text-slate-500 p-1 truncate">{p.filename}</p>
-                        </a>
-                      ))}
-                    </div>
+                    <input type="file" ref={fileRef} className="hidden" accept="image/*" multiple onChange={uploadProof} />
+                    <Button size="sm" variant="outline" onClick={() => fileRef.current?.click()} disabled={uploading} data-testid="upload-proof-btn">
+                      <Upload className="h-3 w-3 mr-1.5" /> {uploading ? 'Uploading...' : 'Upload Image'}
+                    </Button>
                   </div>
-                </>
-              )}
+                </div>
+                {sel.settlement_proofs?.length > 0 ? (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                    {sel.settlement_proofs.map(p => (
+                      <div key={p.id} className="relative group border rounded-lg overflow-hidden">
+                        <img src={`${process.env.REACT_APP_BACKEND_URL}/api/files/${p.path}`} alt={p.filename} className="w-full h-28 object-cover" />
+                        <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                          <a href={`${process.env.REACT_APP_BACKEND_URL}/api/files/${p.path}`} target="_blank" rel="noopener noreferrer" className="text-white"><Eye className="h-4 w-4" /></a>
+                          <button onClick={() => deleteProof(p.id)} className="text-white hover:text-red-300"><Trash2 className="h-4 w-4" /></button>
+                        </div>
+                        <p className="text-[10px] text-slate-500 p-1.5 truncate">{p.filename}</p>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-6 border border-dashed rounded-lg">
+                    <ImageIcon className="h-8 w-8 text-slate-300 mx-auto mb-2" />
+                    <p className="text-xs text-slate-400">No settlement proofs uploaded yet</p>
+                  </div>
+                )}
+              </div>
 
               {sel.status === 'pending' && (
                 <>
