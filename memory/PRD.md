@@ -1,76 +1,45 @@
 # FX Trading Tracker - Product Requirements Document
 
 ## Original Problem Statement
-Build a mobile-responsive FX Trading Tracker platform with:
+Mobile-responsive full-stack FX Trading Tracker platform with:
 - Secure login with role-based access (Admin, Trader, Treasury Operations)
-- Trader: Log Deal Tickets with comprehensive fields
-- Treasury Operations: View/process Deal Tickets (confirm/return + remarks)
-- Admin: Manage reference data, users, and transaction history
-- Industry-aligned Forex practices, cryptocurrency support, dashboard date range toggles
+- Trader: Log Deal Tickets, cancel submitted deals, resubmit returned deals
+- Treasury: View/process Deal Tickets (confirm/return), upload settlement proofs, mandatory remarks
+- Admin: Manage reference data, manage users, view audit trail
+- All roles: Export deal data to CSV
+- Crypto + Fiat currency support, Bank/Crypto toggles, "Ours" section
+- Server-side pagination, lazy loading, performant UI
 
-## Tech Stack
-- **Backend:** FastAPI, MongoDB (motor async), Pydantic, JWT auth, bcrypt
-- **Frontend:** React, React Router, TailwindCSS, Shadcn/UI, Sonner toasts
-- **File Storage:** Emergent Object Storage (settlement proofs / proof of payment)
-- **Architecture:** REST API, decoupled frontend/backend
+## Architecture
+- **Backend:** FastAPI + MongoDB (motor) + JWT auth
+- **Frontend:** React + TailwindCSS + Shadcn UI
+- **Storage:** Emergent Object Storage for settlement proofs
+- **DB Collections:** users, deals, audit_logs
 
-## User Credentials (Seed Data)
-- Admin: admin@fxtracker.com / Admin@123
+## Credentials
 - Trader: trader@fxtracker.com / Trader@123
 - Treasury: treasury@fxtracker.com / Treasury@123
+- Admin: admin@fxtracker.com / Admin@123
 
-## Implemented Features (All Tested)
+## What's Been Implemented
+- [x] Role-based authentication (Admin, Trader, Treasury)
+- [x] Complete deal lifecycle: create, review, confirm, return, cancel, resubmit
+- [x] Server-side pagination on all tables
+- [x] Debounced filter inputs
+- [x] CSV export for deals
+- [x] Audit trail page (Admin)
+- [x] User management (Admin)
+- [x] Settlement proof upload (Treasury)
+- [x] Bank/Crypto toggle and "Ours" section on deal form
+- [x] **P0 Performance Fix (Feb 2026):** React.memo on all table rows (DealRow, TreasuryRow, TxRow, UserRow, AuditRow) + useCallback for handlers. Modal open times reduced from ~12s to <0.2s
 
-### Core Platform
-- [x] Role-based access control (Admin, Trader, Treasury)
-- [x] JWT authentication with login/logout
-- [x] Responsive sidebar navigation per role
-- [x] Dashboard with stats, date range toggles
-- [x] **Server-side pagination** on all tables (20 rows/page, lazy-loaded)
+## P0/P1/P2 Backlog
+- No pending issues or feature requests
 
-### Trader Features
-- [x] New Deal form with validation, Client Name, searchable dropdowns
-- [x] Auto-computation of amount, pre-submission confirmation dialog
-- [x] My Deals with filters + Export CSV + **pagination**
-- [x] Proof of payment upload/view/delete (pending/returned deals)
-- [x] Cancel/Recall with mandatory reason
-- [x] Resubmit returned deals
-- [x] Bank/Crypto toggle on From/To, Ours section
-
-### Treasury Features
-- [x] Deal Queue with Pending/Processed tabs + filters + **pagination**
-- [x] Settlement proof upload/view/delete
-- [x] Confirm/Return with required remarks + confirmation prompt
-
-### Admin Features
-- [x] Reference data management
-- [x] User management with search + **pagination**
-- [x] Transaction History with Export CSV + **pagination**
-- [x] Audit Trail / Activity Log (filterable, paginated)
-
-### Performance
-- [x] Server-side pagination: 20 rows per page, only fetches current page
-- [x] CSV export still downloads ALL matching records (not just current page)
-- [x] Filters reset pagination to page 1
-
-## Key API Endpoints
-- POST /api/auth/login
-- GET /api/deals (paginated: page, limit, filters) → {deals, total, page, pages}
-- GET /api/deals/export (CSV, full dataset)
-- POST /api/deals
-- GET /api/deals/{deal_id}
-- PUT /api/deals/{deal_id}/cancel
-- PUT /api/deals/{deal_id}/resubmit
-- POST /api/deals/{deal_id}/upload
-- DELETE /api/deals/{deal_id}/proofs/{proof_id}
-- PUT /api/deals/{deal_id}/process
-- GET /api/users (paginated: page, limit, search) → {users, total, page, pages}
-- GET /api/audit-logs (paginated)
-- GET /api/reference/{entity_type}
-- GET /api/dashboard/stats
-
-## Backlog / Future Enhancements
-- [ ] Email notifications on deal status changes
-- [ ] PDF deal ticket export for printing
-- [ ] Dashboard analytics/charts enhancements
-- [ ] Deal amendment workflow (edit fields on pending deals)
+## Key Files
+- `backend/server.py` - All API endpoints
+- `frontend/src/pages/DealsPage.jsx` - Trader deals view (DealRow memo)
+- `frontend/src/pages/TreasuryPage.jsx` - Treasury review (TreasuryRow memo)
+- `frontend/src/pages/TransactionHistoryPage.jsx` - Admin transaction history (TxRow memo)
+- `frontend/src/pages/UsersPage.jsx` - Admin user management (UserRow memo)
+- `frontend/src/pages/AuditLogPage.jsx` - Admin audit trail (AuditRow memo)
