@@ -124,11 +124,12 @@ export default function TransactionHistoryPage() {
 
       <Card>
         <CardContent className="p-0">
-          {loading ? (
+          {loading && data.deals.length === 0 ? (
             <div className="flex items-center justify-center h-32"><div className="animate-spin h-6 w-6 border-4 border-[#518dca] border-t-transparent rounded-full" /></div>
           ) : data.deals.length === 0 ? (
             <div className="text-center py-16"><FileText className="h-12 w-12 text-slate-300 mx-auto mb-3" /><p className="text-slate-500">No transactions found</p></div>
           ) : (
+            <div className={loading ? 'opacity-60 pointer-events-none transition-opacity' : 'transition-opacity'}>
             <Table>
               <TableHeader>
                 <TableRow className="bg-slate-50">
@@ -144,6 +145,7 @@ export default function TransactionHistoryPage() {
                 ))}
               </TableBody>
             </Table>
+            </div>
           )}
         </CardContent>
       </Card>

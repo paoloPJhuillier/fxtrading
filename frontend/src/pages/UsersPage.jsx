@@ -93,9 +93,10 @@ export default function UsersPage() {
 
       <Card>
         <CardContent className="p-0">
-          {loading ? (
+          {loading && data.users.length === 0 ? (
             <div className="flex items-center justify-center h-32"><div className="animate-spin h-6 w-6 border-4 border-[#518dca] border-t-transparent rounded-full" /></div>
           ) : (
+            <div className={loading ? 'opacity-60 pointer-events-none transition-opacity' : 'transition-opacity'}>
             <Table>
               <TableHeader>
                 <TableRow className="bg-slate-50">
@@ -112,6 +113,7 @@ export default function UsersPage() {
                 ))}
               </TableBody>
             </Table>
+            </div>
           )}
         </CardContent>
       </Card>

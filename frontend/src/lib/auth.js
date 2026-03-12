@@ -11,7 +11,9 @@ export function AuthProvider({ children }) {
     const token = localStorage.getItem('fx_token');
     const savedUser = localStorage.getItem('fx_user');
     if (token && savedUser) {
-      setUser(JSON.parse(savedUser));
+      const parsed = JSON.parse(savedUser);
+      setUser(parsed);
+      setLoading(false);
       api.get('/auth/me').then(res => {
         setUser(res.data);
         localStorage.setItem('fx_user', JSON.stringify(res.data));
@@ -19,7 +21,7 @@ export function AuthProvider({ children }) {
         localStorage.removeItem('fx_token');
         localStorage.removeItem('fx_user');
         setUser(null);
-      }).finally(() => setLoading(false));
+      });
     } else {
       setLoading(false);
     }

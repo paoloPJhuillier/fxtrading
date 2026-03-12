@@ -110,7 +110,7 @@ export default function AuditLogPage() {
 
       <Card>
         <CardContent className="p-0">
-          {loading ? (
+          {loading && data.logs.length === 0 ? (
             <div className="flex items-center justify-center h-32"><div className="animate-spin h-6 w-6 border-4 border-[#518dca] border-t-transparent rounded-full" /></div>
           ) : data.logs.length === 0 ? (
             <div className="text-center py-16">
@@ -118,6 +118,7 @@ export default function AuditLogPage() {
               <p className="text-slate-500">No audit entries found</p>
             </div>
           ) : (
+            <div className={loading ? 'opacity-60 pointer-events-none transition-opacity' : 'transition-opacity'}>
             <Table>
               <TableHeader>
                 <TableRow className="bg-slate-50">
@@ -135,6 +136,7 @@ export default function AuditLogPage() {
                 ))}
               </TableBody>
             </Table>
+            </div>
           )}
         </CardContent>
       </Card>

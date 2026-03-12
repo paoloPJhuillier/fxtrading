@@ -193,7 +193,7 @@ export default function DealsPage() {
 
       <Card>
         <CardContent className="p-0">
-          {loading ? (
+          {loading && data.deals.length === 0 ? (
             <div className="flex items-center justify-center h-32"><div className="animate-spin h-6 w-6 border-4 border-[#518dca] border-t-transparent rounded-full" /></div>
           ) : data.deals.length === 0 ? (
             <div className="text-center py-16">
@@ -202,6 +202,7 @@ export default function DealsPage() {
               <Button className="mt-4 bg-[#08263e] hover:bg-[#08263e]/90" onClick={() => navigate('/deals/new')} data-testid="empty-new-deal-btn"><Plus className="h-4 w-4 mr-2" /> Create First Deal</Button>
             </div>
           ) : (
+            <div className={loading ? 'opacity-60 pointer-events-none transition-opacity' : 'transition-opacity'}>
             <Table>
               <TableHeader>
                 <TableRow className="bg-slate-50">
@@ -217,6 +218,7 @@ export default function DealsPage() {
                 ))}
               </TableBody>
             </Table>
+            </div>
           )}
         </CardContent>
       </Card>

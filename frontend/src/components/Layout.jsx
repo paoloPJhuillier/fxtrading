@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, memo } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/lib/auth';
 import { Button } from '@/components/ui/button';
@@ -27,18 +27,8 @@ const navConfig = {
   ],
 };
 
-export default function Layout() {
-  const { user, logout } = useAuth();
-  const navigate = useNavigate();
-  const [open, setOpen] = useState(false);
-  const items = navConfig[user?.role] || [];
-
-  const handleLogout = () => {
-    logout();
-    navigate('/login');
-  };
-
-  const SidebarContent = () => (
+const SidebarContent = memo(function SidebarContent({ items, user, onLogout, onNavClick }) {
+  return (
     <div className="flex flex-col h-full">
       <div className="p-6 border-b border-white/10">
         <div className="flex items-center gap-3">
@@ -55,7 +45,7 @@ export default function Layout() {
             key={item.to}
             to={item.to}
             end={item.to === '/dashboard'}
-            onClick={() => setOpen(false)}
+            onClick={onNavClick}
             data-testid={`nav-${item.label.toLowerCase().replace(/\s/g, '-')}`}
             className={({ isActive }) =>
               `flex items-center gap-3 px-4 py-2.5 rounded-md text-sm transition-all duration-150 ${
@@ -78,7 +68,7 @@ export default function Layout() {
         <Button
           variant="ghost"
           className="w-full justify-start text-white/60 hover:text-white hover:bg-white/10"
-          onClick={handleLogout}
+          onClick={onLogout}
           data-testid="logout-btn"
         >
           <LogOut className="h-4 w-4 mr-3" />
@@ -87,11 +77,25 @@ export default function Layout() {
       </div>
     </div>
   );
+});
+
+export default function Layout() {
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
+  const [open, setOpen] = useState(false);
+  const items = navConfig[user?.role] || [];
+
+  const handleLogout = () => {
+    logout();
+    navigate('/login');
+  };
+
+  const handleNavClick = () => setOpen(false);
 
   return (
     <div className="flex h-screen bg-[#f8fafc]">
       <aside className="hidden lg:flex w-64 bg-[#08263e] flex-col flex-shrink-0">
-        <SidebarContent />
+        <SidebarContent items={items} user={user} onLogout={handleLogout} onNavClick={handleNavClick} />
       </aside>
       <div className="flex-1 flex flex-col overflow-hidden">
         <header className="h-14 bg-white border-b border-slate-200 flex items-center px-4 lg:px-8 flex-shrink-0">
@@ -102,7 +106,7 @@ export default function Layout() {
               </Button>
             </SheetTrigger>
             <SheetContent side="left" className="w-64 p-0 bg-[#08263e] border-none">
-              <SidebarContent />
+              <SidebarContent items={items} user={user} onLogout={handleLogout} onNavClick={handleNavClick} />
             </SheetContent>
           </Sheet>
           <div className="flex-1" />

@@ -156,8 +156,9 @@ export default function TreasuryPage() {
         </TabsList>
         <TabsContent value="pending" className="mt-4">
           <Card><CardContent className="p-0">
-            {loading ? <div className="flex items-center justify-center h-32"><div className="animate-spin h-6 w-6 border-4 border-[#518dca] border-t-transparent rounded-full" /></div>
+            {loading && pending.length === 0 ? <div className="flex items-center justify-center h-32"><div className="animate-spin h-6 w-6 border-4 border-[#518dca] border-t-transparent rounded-full" /></div>
             : pending.length === 0 ? <p className="text-center py-16 text-slate-400">No deals</p> :
+            <div className={loading ? 'opacity-60 pointer-events-none transition-opacity' : 'transition-opacity'}>
             <Table>
               <TableHeader><TableRow className="bg-slate-50">
                 <TableHead>Reference</TableHead><TableHead>Client</TableHead><TableHead>Trader</TableHead>
@@ -168,12 +169,14 @@ export default function TreasuryPage() {
               <TableBody>{pending.map(d => (
                 <TreasuryRow key={d.id} deal={d} showActions onReview={openReview} />
               ))}</TableBody>
-            </Table>}
+            </Table>
+            </div>}
           </CardContent></Card>
         </TabsContent>
         <TabsContent value="processed" className="mt-4">
           <Card><CardContent className="p-0">
             {done.length === 0 ? <p className="text-center py-16 text-slate-400">No deals</p> :
+            <div className={loading ? 'opacity-60 pointer-events-none transition-opacity' : 'transition-opacity'}>
             <Table>
               <TableHeader><TableRow className="bg-slate-50">
                 <TableHead>Reference</TableHead><TableHead>Client</TableHead><TableHead>Trader</TableHead>
@@ -185,7 +188,8 @@ export default function TreasuryPage() {
               <TableBody>{done.map(d => (
                 <TreasuryRow key={d.id} deal={d} showActions={false} onReview={openReview} />
               ))}</TableBody>
-            </Table>}
+            </Table>
+            </div>}
           </CardContent></Card>
         </TabsContent>
       </Tabs>

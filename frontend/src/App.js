@@ -1,17 +1,24 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { useEffect } from 'react';
+import { lazy, Suspense, useEffect } from 'react';
 import { Toaster } from 'sonner';
 import { AuthProvider, useAuth } from '@/lib/auth';
 import Layout from '@/components/Layout';
 import LoginPage from '@/pages/LoginPage';
-import DashboardPage from '@/pages/DashboardPage';
-import DealsPage from '@/pages/DealsPage';
-import NewDealPage from '@/pages/NewDealPage';
-import TreasuryPage from '@/pages/TreasuryPage';
-import ReferenceDataPage from '@/pages/ReferenceDataPage';
-import UsersPage from '@/pages/UsersPage';
-import TransactionHistoryPage from '@/pages/TransactionHistoryPage';
-import AuditLogPage from '@/pages/AuditLogPage';
+
+const DashboardPage = lazy(() => import('@/pages/DashboardPage'));
+const DealsPage = lazy(() => import('@/pages/DealsPage'));
+const NewDealPage = lazy(() => import('@/pages/NewDealPage'));
+const TreasuryPage = lazy(() => import('@/pages/TreasuryPage'));
+const ReferenceDataPage = lazy(() => import('@/pages/ReferenceDataPage'));
+const UsersPage = lazy(() => import('@/pages/UsersPage'));
+const TransactionHistoryPage = lazy(() => import('@/pages/TransactionHistoryPage'));
+const AuditLogPage = lazy(() => import('@/pages/AuditLogPage'));
+
+const PageLoader = () => (
+  <div className="flex items-center justify-center h-32">
+    <div className="animate-spin h-6 w-6 border-3 border-[#518dca] border-t-transparent rounded-full" />
+  </div>
+);
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth();
@@ -28,20 +35,22 @@ function AppRoutes() {
   const { user, loading } = useAuth();
   if (loading) return null;
   return (
-    <Routes>
-      <Route path="/login" element={user ? <Navigate to="/dashboard" /> : <LoginPage />} />
-      <Route path="/" element={<Navigate to={user ? "/dashboard" : "/login"} />} />
-      <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
-        <Route path="/dashboard" element={<DashboardPage />} />
-        <Route path="/deals" element={<DealsPage />} />
-        <Route path="/deals/new" element={<NewDealPage />} />
-        <Route path="/treasury" element={<TreasuryPage />} />
-        <Route path="/reference-data" element={<ReferenceDataPage />} />
-        <Route path="/users" element={<UsersPage />} />
-        <Route path="/transactions" element={<TransactionHistoryPage />} />
-        <Route path="/audit-log" element={<AuditLogPage />} />
-      </Route>
-    </Routes>
+    <Suspense fallback={<PageLoader />}>
+      <Routes>
+        <Route path="/login" element={user ? <Navigate to="/dashboard" /> : <LoginPage />} />
+        <Route path="/" element={<Navigate to={user ? "/dashboard" : "/login"} />} />
+        <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
+          <Route path="/dashboard" element={<DashboardPage />} />
+          <Route path="/deals" element={<DealsPage />} />
+          <Route path="/deals/new" element={<NewDealPage />} />
+          <Route path="/treasury" element={<TreasuryPage />} />
+          <Route path="/reference-data" element={<ReferenceDataPage />} />
+          <Route path="/users" element={<UsersPage />} />
+          <Route path="/transactions" element={<TransactionHistoryPage />} />
+          <Route path="/audit-log" element={<AuditLogPage />} />
+        </Route>
+      </Routes>
+    </Suspense>
   );
 }
 

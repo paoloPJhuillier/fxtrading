@@ -601,49 +601,52 @@ async def get_dashboard_stats(date_range: str = Query("30d", alias="range"), use
     elif date_range == "ytd":
         start_date = datetime(now.year, 1, 1, tzinfo=timezone.utc).isoformat()
 
-    query = {}
+    match = {}
     if start_date:
-        query["created_at"] = {"$gte": start_date}
+        match["created_at"] = {"$gte": start_date}
     if user["role"] == "trader":
-        query["created_by"] = user["id"]
+        match["created_by"] = user["id"]
 
-    deals = await db.deals.find(query, {"_id": 0}).to_list(100000)
+    pipeline = [
+        {"$match": match},
+        {"$facet": {
+            "counts": [{"$group": {
+                "_id": "$status",
+                "count": {"$sum": 1},
+                "volume": {"$sum": {"$toDouble": {"$ifNull": ["$amount", "0"]}}}
+            }}],
+            "by_date": [{"$group": {
+                "_id": {"$substr": ["$created_at", 0, 10]},
+                "count": {"$sum": 1},
+                "volume": {"$sum": {"$toDouble": {"$ifNull": ["$amount", "0"]}}}
+            }}, {"$sort": {"_id": 1}}],
+            "recent": [{"$sort": {"created_at": -1}}, {"$limit": 10}, {"$project": {"_id": 0}}]
+        }}
+    ]
 
-    total = len(deals)
-    pending = sum(1 for d in deals if d["status"] == "pending")
-    confirmed = sum(1 for d in deals if d["status"] == "confirmed")
-    returned = sum(1 for d in deals if d["status"] == "returned")
-    cancelled = sum(1 for d in deals if d["status"] == "cancelled")
-    total_volume = sum(float(d.get("amount", 0)) for d in deals)
+    result = await db.deals.aggregate(pipeline).to_list(1)
+    facets = result[0] if result else {"counts": [], "by_date": [], "recent": []}
 
-    deals_by_date = {}
-    for d in deals:
-        date_key = d["created_at"][:10]
-        if date_key not in deals_by_date:
-            deals_by_date[date_key] = {"date": date_key, "count": 0, "volume": 0}
-        deals_by_date[date_key]["count"] += 1
-        deals_by_date[date_key]["volume"] += float(d.get("amount", 0))
+    status_map = {}
+    total_volume = 0
+    total_deals = 0
+    for c in facets["counts"]:
+        status_map[c["_id"]] = c["count"]
+        total_volume += c["volume"]
+        total_deals += c["count"]
 
-    deals_by_currency = {}
-    for d in deals:
-        pair = f"{d.get('buy_currency', '')}/{d.get('sell_currency', '')}"
-        if pair not in deals_by_currency:
-            deals_by_currency[pair] = {"pair": pair, "count": 0, "volume": 0}
-        deals_by_currency[pair]["count"] += 1
-        deals_by_currency[pair]["volume"] += float(d.get("amount", 0))
-
-    recent = sorted(deals, key=lambda x: x["created_at"], reverse=True)[:10]
+    deals_by_date = [{"date": d["_id"], "count": d["count"], "volume": d["volume"]} for d in facets["by_date"]]
 
     stats = {
-        "total_deals": total,
-        "pending_deals": pending,
-        "confirmed_deals": confirmed,
-        "returned_deals": returned,
-        "cancelled_deals": cancelled,
+        "total_deals": total_deals,
+        "pending_deals": status_map.get("pending", 0),
+        "confirmed_deals": status_map.get("confirmed", 0),
+        "returned_deals": status_map.get("returned", 0),
+        "cancelled_deals": status_map.get("cancelled", 0),
         "total_volume": total_volume,
-        "deals_by_date": sorted(deals_by_date.values(), key=lambda x: x["date"]),
-        "deals_by_currency": sorted(deals_by_currency.values(), key=lambda x: x["volume"], reverse=True)[:10],
-        "recent_deals": recent
+        "deals_by_date": deals_by_date,
+        "deals_by_currency": [],
+        "recent_deals": facets["recent"]
     }
 
     if user["role"] == "admin":
