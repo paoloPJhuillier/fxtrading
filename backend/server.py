@@ -411,7 +411,7 @@ async def upload_settlement_proof(deal_id: str, file: UploadFile = File(...), us
     return proof
 
 @api_router.get("/files/{path:path}")
-async def get_file(path: str, user=Depends(get_current_user)):
+async def get_file(path: str):
     try:
         data, ct = get_object(path)
         return Response(content=data, media_type=ct)

@@ -49,13 +49,16 @@ function App() {
   useEffect(() => {
     const hide = () => {
       const el = document.getElementById('emergent-badge');
-      if (el) el.remove();
+      if (el) { el.remove(); return true; }
+      return false;
     };
-    hide();
+    if (hide()) return;
     const t1 = setTimeout(hide, 500);
     const t2 = setTimeout(hide, 2000);
-    const obs = new MutationObserver(hide);
-    obs.observe(document.body, { childList: true, subtree: true });
+    const obs = new MutationObserver(() => {
+      if (hide()) obs.disconnect();
+    });
+    obs.observe(document.body, { childList: true });
     return () => { clearTimeout(t1); clearTimeout(t2); obs.disconnect(); };
   }, []);
 
