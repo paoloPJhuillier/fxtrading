@@ -34,21 +34,25 @@ export default function UsersPage() {
   }, [search]);
 
   const hasLoaded = useRef(false);
-  const load = useCallback(async () => {
+  const load = useCallback(async (signal) => {
     if (!hasLoaded.current) setLoading(true);
     try {
       const params = new URLSearchParams();
       params.append('page', page);
       params.append('limit', PAGE_SIZE);
       if (debouncedSearch) params.append('search', debouncedSearch);
-      const r = await api.get(`/users?${params.toString()}`);
+      const r = await api.get(`/users?${params.toString()}`, { signal });
       setData(r.data);
       hasLoaded.current = true;
-    } catch (e) { console.error(e); }
-    finally { setLoading(false); }
+    } catch (e) { if (!signal?.aborted) console.error(e); }
+    finally { if (!signal?.aborted) setLoading(false); }
   }, [page, debouncedSearch]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    const c = new AbortController();
+    load(c.signal);
+    return () => c.abort();
+  }, [load]);
 
   const openNew = () => { setEdit(null); setForm({ name: '', email: '', password: '', role: 'trader' }); setOpen(true); };
   const openEdit = useCallback((u) => { setEdit(u); setForm({ name: u.name, email: u.email, password: '', role: u.role }); setOpen(true); }, []);

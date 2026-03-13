@@ -47,7 +47,7 @@ export default function TreasuryPage() {
     return () => clearTimeout(t);
   }, [filter]);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (signal) => {
     if (!hasLoaded.current) setLoading(true);
     try {
       const params = new URLSearchParams();
@@ -57,14 +57,18 @@ export default function TreasuryPage() {
       if (debouncedFilter.currency) params.append('currency', debouncedFilter.currency);
       if (debouncedFilter.date_from) params.append('date_from', debouncedFilter.date_from);
       if (debouncedFilter.date_to) params.append('date_to', debouncedFilter.date_to);
-      const r = await api.get(`/deals?${params.toString()}`);
+      const r = await api.get(`/deals?${params.toString()}`, { signal });
       setData(r.data);
       hasLoaded.current = true;
-    } catch (e) { console.error(e); }
-    finally { setLoading(false); }
+    } catch (e) { if (!signal?.aborted) console.error(e); }
+    finally { if (!signal?.aborted) setLoading(false); }
   }, [debouncedFilter, page]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    const c = new AbortController();
+    load(c.signal);
+    return () => c.abort();
+  }, [load]);
 
   const tryProcess = (status) => {
     if (!remarks.trim()) { toast.error('Treasury remarks are required'); return; }

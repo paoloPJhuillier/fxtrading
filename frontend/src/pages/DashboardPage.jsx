@@ -43,21 +43,23 @@ export default function DashboardPage() {
   const [range, setRange] = useState(cachedRange);
   const [loading, setLoading] = useState(!statsCache);
 
-  const fetchStats = useCallback(async (isRangeChange) => {
+  const fetchStats = useCallback(async (signal) => {
     if (!statsCache) setLoading(true);
     try {
-      const res = await api.get(`/dashboard/stats?range=${range}`);
+      const res = await api.get(`/dashboard/stats?range=${range}`, { signal });
       setStats(res.data);
       statsCache = res.data;
       cachedRange = range;
-    } catch (err) { console.error(err); }
-    finally { setLoading(false); }
+    } catch (err) { if (!signal?.aborted) console.error(err); }
+    finally { if (!signal?.aborted) setLoading(false); }
   }, [range]);
 
   useEffect(() => {
     // Skip fetch if we already have cached data for this range
     if (statsCache && range === cachedRange) return;
-    fetchStats();
+    const c = new AbortController();
+    fetchStats(c.signal);
+    return () => c.abort();
   }, [fetchStats, range]);
 
   const pieData = useMemo(() => stats ? [

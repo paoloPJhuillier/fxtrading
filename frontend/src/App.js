@@ -27,6 +27,7 @@ const TransactionHistoryPage = lazy(pageImports.TransactionHistory);
 const AuditLogPage = lazy(pageImports.AuditLog);
 
 // Prefetch page chunks one at a time with delay to avoid network contention
+let prefetchTimer = null;
 function prefetchAllPages() {
   const keys = Object.keys(pageImports);
   let i = 0;
@@ -34,10 +35,13 @@ function prefetchAllPages() {
     if (i < keys.length) {
       pageImports[keys[i]]();
       i++;
-      setTimeout(next, 150);
+      prefetchTimer = setTimeout(next, 150);
     }
   }
   next();
+}
+function cancelPrefetch() {
+  if (prefetchTimer) { clearTimeout(prefetchTimer); prefetchTimer = null; }
 }
 
 const PageLoader = () => (
@@ -65,10 +69,10 @@ function AppRoutes() {
     if (!user) return;
     if ('requestIdleCallback' in window) {
       const id = requestIdleCallback(prefetchAllPages);
-      return () => cancelIdleCallback(id);
+      return () => { cancelIdleCallback(id); cancelPrefetch(); };
     } else {
       const id = setTimeout(prefetchAllPages, 1000);
-      return () => clearTimeout(id);
+      return () => { clearTimeout(id); cancelPrefetch(); };
     }
   }, [user]);
 

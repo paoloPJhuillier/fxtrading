@@ -41,7 +41,7 @@ export default function AuditLogPage() {
   }, [filter]);
 
   const hasLoaded = useRef(false);
-  const load = useCallback(async () => {
+  const load = useCallback(async (signal) => {
     if (!hasLoaded.current) setLoading(true);
     try {
       const params = new URLSearchParams();
@@ -52,14 +52,18 @@ export default function AuditLogPage() {
       if (debouncedFilter.user_name) params.append('user_name', debouncedFilter.user_name);
       if (debouncedFilter.date_from) params.append('date_from', debouncedFilter.date_from);
       if (debouncedFilter.date_to) params.append('date_to', debouncedFilter.date_to);
-      const res = await api.get(`/audit-logs?${params.toString()}`);
+      const res = await api.get(`/audit-logs?${params.toString()}`, { signal });
       setData(res.data);
       hasLoaded.current = true;
-    } catch (e) { console.error(e); }
-    finally { setLoading(false); }
+    } catch (e) { if (!signal?.aborted) console.error(e); }
+    finally { if (!signal?.aborted) setLoading(false); }
   }, [page, debouncedFilter]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    const c = new AbortController();
+    load(c.signal);
+    return () => c.abort();
+  }, [load]);
 
   const clearFilters = () => { setFilter({ action: 'all', entity_type: 'all', user_name: '', date_from: '', date_to: '' }); setPage(1); };
   const hasFilters = filter.action !== 'all' || filter.entity_type !== 'all' || filter.user_name || filter.date_from || filter.date_to;

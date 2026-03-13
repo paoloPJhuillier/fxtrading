@@ -49,7 +49,7 @@ export default function DealsPage() {
     return () => clearTimeout(t);
   }, [filter]);
 
-  const fetchDeals = useCallback(async () => {
+  const fetchDeals = useCallback(async (signal) => {
     if (!hasLoaded.current) setLoading(true);
     try {
       const params = new URLSearchParams();
@@ -60,14 +60,18 @@ export default function DealsPage() {
       if (debouncedFilter.currency) params.append('currency', debouncedFilter.currency);
       if (debouncedFilter.date_from) params.append('date_from', debouncedFilter.date_from);
       if (debouncedFilter.date_to) params.append('date_to', debouncedFilter.date_to);
-      const res = await api.get(`/deals?${params.toString()}`);
+      const res = await api.get(`/deals?${params.toString()}`, { signal });
       setData(res.data);
       hasLoaded.current = true;
-    } catch (err) { console.error(err); }
-    finally { setLoading(false); }
+    } catch (err) { if (!signal?.aborted) console.error(err); }
+    finally { if (!signal?.aborted) setLoading(false); }
   }, [debouncedFilter, page]);
 
-  useEffect(() => { fetchDeals(); }, [fetchDeals]);
+  useEffect(() => {
+    const c = new AbortController();
+    fetchDeals(c.signal);
+    return () => c.abort();
+  }, [fetchDeals]);
 
   const clearFilters = () => { setFilter({ status: 'all', client: '', currency: '', date_from: '', date_to: '' }); setPage(1); };
   const hasFilters = filter.status !== 'all' || filter.client || filter.currency || filter.date_from || filter.date_to;

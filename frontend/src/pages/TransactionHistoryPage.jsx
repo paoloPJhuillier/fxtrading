@@ -34,7 +34,7 @@ export default function TransactionHistoryPage() {
   }, [filter]);
 
   const hasLoaded = useRef(false);
-  const load = useCallback(async () => {
+  const load = useCallback(async (signal) => {
     if (!hasLoaded.current) setLoading(true);
     try {
       const params = new URLSearchParams();
@@ -45,14 +45,18 @@ export default function TransactionHistoryPage() {
       if (debouncedFilter.currency) params.append('currency', debouncedFilter.currency);
       if (debouncedFilter.date_from) params.append('date_from', debouncedFilter.date_from);
       if (debouncedFilter.date_to) params.append('date_to', debouncedFilter.date_to);
-      const res = await api.get(`/deals?${params.toString()}`);
+      const res = await api.get(`/deals?${params.toString()}`, { signal });
       setData(res.data);
       hasLoaded.current = true;
-    } catch (e) { console.error(e); }
-    finally { setLoading(false); }
+    } catch (e) { if (!signal?.aborted) console.error(e); }
+    finally { if (!signal?.aborted) setLoading(false); }
   }, [debouncedFilter, page]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    const c = new AbortController();
+    load(c.signal);
+    return () => c.abort();
+  }, [load]);
 
   const clearFilters = () => { setFilter({ status: 'all', client: '', currency: '', date_from: '', date_to: '' }); setPage(1); };
   const hasFilters = filter.status !== 'all' || filter.client || filter.currency || filter.date_from || filter.date_to;

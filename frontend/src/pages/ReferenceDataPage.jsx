@@ -30,14 +30,21 @@ export default function ReferenceDataPage() {
   const [form, setForm] = useState({ name: '', code: '', swift_code: '', type: 'fiat', symbol: '' });
 
   const hasLoaded = useRef(false);
-  const load = useCallback(async () => {
+  const load = useCallback(async (signal) => {
     if (!hasLoaded.current) setLoading(true);
-    try { const r = await api.get(`/reference/${tab}`); setItems(r.data); hasLoaded.current = true; }
-    catch (e) { console.error(e); }
-    finally { setLoading(false); }
+    try {
+      const r = await api.get(`/reference/${tab}`, { signal });
+      setItems(r.data);
+      hasLoaded.current = true;
+    } catch (e) { if (!signal?.aborted) console.error(e); }
+    finally { if (!signal?.aborted) setLoading(false); }
   }, [tab]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    const c = new AbortController();
+    load(c.signal);
+    return () => c.abort();
+  }, [load]);
 
   const openNew = () => { setEdit(null); setForm({ name: '', code: '', swift_code: '', type: 'fiat', symbol: '' }); setOpen(true); };
   const openEdit = useCallback((item) => {

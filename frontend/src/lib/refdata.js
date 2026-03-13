@@ -8,14 +8,15 @@ export function RefDataProvider({ children }) {
   const { user } = useAuth();
   const [data, setData] = useState(null);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (signal) => {
     try {
+      const opts = signal ? { signal } : {};
       const [c, b, tx, tf, cur] = await Promise.all([
-        api.get('/reference/companies'),
-        api.get('/reference/banks'),
-        api.get('/reference/transaction-types'),
-        api.get('/reference/transfer-types'),
-        api.get('/reference/currencies'),
+        api.get('/reference/companies', opts),
+        api.get('/reference/banks', opts),
+        api.get('/reference/transaction-types', opts),
+        api.get('/reference/transfer-types', opts),
+        api.get('/reference/currencies', opts),
       ]);
       setData({
         companies: c.data.filter(i => i.is_active),
@@ -27,11 +28,14 @@ export function RefDataProvider({ children }) {
           companies: c.data, banks: b.data, txTypes: tx.data, tfTypes: tf.data, currencies: cur.data,
         }
       });
-    } catch (e) { console.error(e); }
+    } catch (e) { if (!signal?.aborted) console.error(e); }
   }, []);
 
   useEffect(() => {
-    if (user) load();
+    if (!user) return;
+    const c = new AbortController();
+    load(c.signal);
+    return () => c.abort();
   }, [user, load]);
 
   return (
