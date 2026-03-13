@@ -140,9 +140,8 @@ export default function DealsPage() {
     finally { setResubmitting(false); }
   };
 
-  const viewDeal = useCallback(async (dealId) => {
-    const r = await api.get(`/deals/${dealId}`);
-    _setSel(r.data);
+  const viewDeal = useCallback((deal) => {
+    _setSel(deal);
   }, []);
 
   return (
@@ -399,7 +398,7 @@ const DealRow = memo(function DealRow({ deal, onView }) {
       <TableCell className="text-xs">{format(new Date(deal.deal_date + 'T00:00:00'), 'dd MMM yyyy')}</TableCell>
       <TableCell><Badge className={SB[deal.status]}>{deal.status}</Badge></TableCell>
       <TableCell>
-        <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => onView(deal.id)} data-testid={`view-deal-${deal.id}`}>
+        <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => onView(deal)} data-testid={`view-deal-${deal.id}`}>
           <Eye className="h-3.5 w-3.5" />
         </Button>
       </TableCell>

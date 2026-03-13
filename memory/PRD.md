@@ -56,6 +56,7 @@ Mobile-responsive full-stack FX Trading Tracker platform with:
 - [x] **Loading Flash Fix (Mar 2026):** Applied hasLoaded ref pattern across all 6 data pages — loading spinner only shows on initial load, subsequent fetches (filter/pagination/tab) update silently. Debounce reduced from 400ms to 250ms.
 - [x] **Proof of Payment Upload at Deal Creation (Mar 2026):** Trader can select and upload settlement proof files during deal creation. Files uploaded after deal is created via POST /deals/{id}/upload.
 - [x] **Global RefData Cache (Mar 2026):** Created RefDataContext to fetch reference data once on login and cache globally. NewDealPage loads instantly (106ms on repeat visit) with pre-populated dropdowns — eliminated 5 API calls per visit. ReferenceDataPage mutations invalidate the cache via reload().
+- [x] **Instant Deal Dialog (Mar 2026):** Eliminated redundant API call when viewing deal detail on My Deals page — dialog now opens in 78ms using data already in table row.
 
 ## P0/P1/P2 Backlog
 - No pending issues or feature requests
