@@ -67,6 +67,8 @@ Mobile-responsive full-stack FX Trading Tracker platform with:
 
 ## P0/P1/P2 Backlog
 - No pending issues or feature requests. All performance optimizations complete.
+- [x] **First Name / Last Name (Mar 2026):** Replaced single `name` field with `first_name` + `last_name` across backend model, seed data, JWT token, login response, audit logging, all API endpoints. Added DB migration to split existing user names. Frontend: Layout sidebar, header, avatar initials, Admin Users page (add/edit form with separate fields, table display).
+- [x] **Change Password (Mar 2026):** New `PUT /api/auth/change-password` endpoint validates current password before allowing change. Frontend: Change Password dialog accessible from sidebar for all roles (Trader, Treasury, Admin), with current/new/confirm fields and client-side validation.
 
 ## Key Files
 - `backend/server.py` - All API endpoints
