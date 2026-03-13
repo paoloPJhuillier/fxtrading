@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, memo } from 'react';
+import { useState, useEffect, useCallback, useMemo, memo } from 'react';
 import { useAuth } from '@/lib/auth';
 import api from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -60,11 +60,11 @@ export default function DashboardPage() {
     fetchStats();
   }, [fetchStats, range]);
 
-  const pieData = stats ? [
+  const pieData = useMemo(() => stats ? [
     { name: 'Pending', value: stats.pending_deals },
     { name: 'Confirmed', value: stats.confirmed_deals },
     { name: 'Returned', value: stats.returned_deals },
-  ].filter(d => d.value > 0) : [];
+  ].filter(d => d.value > 0) : [], [stats]);
 
   if (!stats && loading) return (
     <div data-testid="dashboard-page">
@@ -127,38 +127,8 @@ export default function DashboardPage() {
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-            <Card>
-              <CardHeader><CardTitle className="text-base text-[#08263e]" style={{ fontFamily: 'Chivo' }}>Deals Over Time</CardTitle></CardHeader>
-              <CardContent>
-                {stats.deals_by_date?.length > 0 ? (
-                  <ResponsiveContainer width="100%" height={240}>
-                    <BarChart data={stats.deals_by_date}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                      <XAxis dataKey="date" tick={{ fontSize: 10 }} tickFormatter={d => format(new Date(d + 'T00:00:00'), 'dd MMM')} />
-                      <YAxis tick={{ fontSize: 10 }} allowDecimals={false} />
-                      <Tooltip />
-                      <Bar dataKey="count" fill="#518dca" radius={[4, 4, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                ) : <p className="text-sm text-slate-400 text-center py-16">No data for selected period</p>}
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader><CardTitle className="text-base text-[#08263e]" style={{ fontFamily: 'Chivo' }}>Status Distribution</CardTitle></CardHeader>
-              <CardContent>
-                {pieData.length > 0 ? (
-                  <ResponsiveContainer width="100%" height={240}>
-                    <PieChart>
-                      <Pie data={pieData} cx="50%" cy="50%" innerRadius={55} outerRadius={90} dataKey="value"
-                        label={({ name, value }) => `${name}: ${value}`} labelLine={false}>
-                        {pieData.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
-                      </Pie>
-                      <Tooltip />
-                    </PieChart>
-                  </ResponsiveContainer>
-                ) : <p className="text-sm text-slate-400 text-center py-16">No data for selected period</p>}
-              </CardContent>
-            </Card>
+            <DealsChart data={stats.deals_by_date} />
+            <StatusChart data={pieData} />
           </div>
 
           <Card>
@@ -206,7 +176,57 @@ const RecentDealRow = memo(function RecentDealRow({ deal }) {
   );
 });
 
-function Metric({ icon: Icon, label, value, color }) {
+const DealsChart = memo(function DealsChart({ data }) {
+  if (!data?.length) return (
+    <Card>
+      <CardHeader><CardTitle className="text-base text-[#08263e]" style={{ fontFamily: 'Chivo' }}>Deals Over Time</CardTitle></CardHeader>
+      <CardContent><p className="text-sm text-slate-400 text-center py-16">No data for selected period</p></CardContent>
+    </Card>
+  );
+  return (
+    <Card>
+      <CardHeader><CardTitle className="text-base text-[#08263e]" style={{ fontFamily: 'Chivo' }}>Deals Over Time</CardTitle></CardHeader>
+      <CardContent>
+        <ResponsiveContainer width="100%" height={240}>
+          <BarChart data={data}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+            <XAxis dataKey="date" tick={{ fontSize: 10 }} tickFormatter={d => format(new Date(d + 'T00:00:00'), 'dd MMM')} />
+            <YAxis tick={{ fontSize: 10 }} allowDecimals={false} />
+            <Tooltip />
+            <Bar dataKey="count" fill="#518dca" radius={[4, 4, 0, 0]} isAnimationActive={false} />
+          </BarChart>
+        </ResponsiveContainer>
+      </CardContent>
+    </Card>
+  );
+});
+
+const StatusChart = memo(function StatusChart({ data }) {
+  if (!data?.length) return (
+    <Card>
+      <CardHeader><CardTitle className="text-base text-[#08263e]" style={{ fontFamily: 'Chivo' }}>Status Distribution</CardTitle></CardHeader>
+      <CardContent><p className="text-sm text-slate-400 text-center py-16">No data for selected period</p></CardContent>
+    </Card>
+  );
+  return (
+    <Card>
+      <CardHeader><CardTitle className="text-base text-[#08263e]" style={{ fontFamily: 'Chivo' }}>Status Distribution</CardTitle></CardHeader>
+      <CardContent>
+        <ResponsiveContainer width="100%" height={240}>
+          <PieChart>
+            <Pie data={data} cx="50%" cy="50%" innerRadius={55} outerRadius={90} dataKey="value"
+              label={({ name, value }) => `${name}: ${value}`} labelLine={false} isAnimationActive={false}>
+              {data.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
+            </Pie>
+            <Tooltip />
+          </PieChart>
+        </ResponsiveContainer>
+      </CardContent>
+    </Card>
+  );
+});
+
+const Metric = memo(function Metric({ icon: Icon, label, value, color }) {
   return (
     <Card data-testid={`metric-${label.toLowerCase().replace(/\s/g, '-')}`}>
       <CardContent className="p-5">
@@ -222,7 +242,7 @@ function Metric({ icon: Icon, label, value, color }) {
       </CardContent>
     </Card>
   );
-}
+});
 
 function SkeletonCard() {
   return (
