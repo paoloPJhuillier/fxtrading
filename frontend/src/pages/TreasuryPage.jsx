@@ -215,6 +215,7 @@ export default function TreasuryPage() {
       )}
 
       {/* Review Deal Dialog */}
+      {(!!_sel || !!sel) && !confirmAction && (
       <Dialog open={!!_sel && !confirmAction} onOpenChange={o => !o && _setSel(null)}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" data-testid="process-deal-dialog">
           <DialogHeader><DialogTitle style={{ fontFamily: 'Chivo' }} className="text-[#08263e]">Review Deal - {sel?.reference_number}</DialogTitle></DialogHeader>
@@ -295,8 +296,10 @@ export default function TreasuryPage() {
           )}
         </DialogContent>
       </Dialog>
+      )}
 
       {/* Confirmation Prompt */}
+      {!!confirmAction && (
       <Dialog open={!!confirmAction} onOpenChange={o => { if (!o) setConfirmAction(null); }}>
         <DialogContent className="max-w-sm" data-testid="confirm-process-dialog">
           <DialogHeader>
@@ -324,6 +327,7 @@ export default function TreasuryPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      )}
     </div>
   );
 }

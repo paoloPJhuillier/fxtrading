@@ -138,6 +138,7 @@ export default function UsersPage() {
         </div>
       )}
 
+      {open && (
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent data-testid="user-dialog">
           <DialogHeader>
@@ -174,6 +175,7 @@ export default function UsersPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      )}
     </div>
   );
 }

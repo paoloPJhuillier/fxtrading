@@ -129,6 +129,7 @@ export default function ReferenceDataPage() {
         ))}
       </Tabs>
 
+      {open && (
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent data-testid="ref-item-dialog">
           <DialogHeader>
@@ -175,6 +176,7 @@ export default function ReferenceDataPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      )}
     </div>
   );
 }

@@ -170,6 +170,7 @@ export default function TransactionHistoryPage() {
         </div>
       )}
 
+      {(!!_sel || !!sel) && (
       <Dialog open={!!_sel} onOpenChange={o => !o && _setSel(null)}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" data-testid="tx-detail-dialog">
           <DialogHeader><DialogTitle style={{ fontFamily: 'Chivo' }} className="text-[#08263e]">Deal Details - {sel?.reference_number}</DialogTitle></DialogHeader>
@@ -216,6 +217,7 @@ export default function TransactionHistoryPage() {
           )}
         </DialogContent>
       </Dialog>
+      )}
     </div>
   );
 }

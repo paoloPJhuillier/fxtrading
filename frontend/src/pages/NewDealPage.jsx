@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, memo, useRef } from 'react';
+import { useState, useCallback, useMemo, memo, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '@/lib/api';
 import { useRefData } from '@/lib/refdata';
@@ -27,6 +27,13 @@ export default function NewDealPage() {
   const proofRef = useRef(null);
   const { data: ref } = useRefData();
   const safeRef = ref || { companies: [], banks: [], txTypes: [], tfTypes: [], currencies: [] };
+
+  // Defer heavy sections (Source/Dest/Ours) to not block first paint
+  const [heavyReady, setHeavyReady] = useState(false);
+  useEffect(() => {
+    const id = requestAnimationFrame(() => setHeavyReady(true));
+    return () => cancelAnimationFrame(id);
+  }, []);
   const [f, setF] = useState({
     transaction_type: '', transfer_type: '', client_name: '',
     deal_date: new Date(), value_date: new Date(),
@@ -192,6 +199,7 @@ export default function NewDealPage() {
             </CardContent>
           </Card>
 
+          {heavyReady && (<>
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
@@ -239,8 +247,10 @@ export default function NewDealPage() {
               )}
             </CardContent>
           </Card>
+          </>)}
         </div>
 
+        {heavyReady && (<>
         <Card className="mt-6">
           <CardHeader>
             <div className="flex items-center justify-between">
@@ -315,6 +325,7 @@ export default function NewDealPage() {
             {submitting ? 'Creating...' : 'Submit Deal Ticket'}
           </Button>
         </div>
+        </>)}
       </form>
 
       <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>

@@ -243,6 +243,7 @@ export default function DealsPage() {
       )}
 
       {/* Deal Detail Dialog */}
+      {(!!_sel || !!sel) && !cancelOpen && (
       <Dialog open={!!_sel && !cancelOpen} onOpenChange={o => { if (!o) _setSel(null); }}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" data-testid="deal-detail-dialog">
           <DialogHeader><DialogTitle className="text-[#08263e]" style={{ fontFamily: 'Chivo' }}>Deal Details - {sel?.reference_number}</DialogTitle></DialogHeader>
@@ -332,8 +333,10 @@ export default function DealsPage() {
           )}
         </DialogContent>
       </Dialog>
+      )}
 
       {/* Cancel Deal Dialog */}
+      {cancelOpen && (
       <Dialog open={cancelOpen} onOpenChange={o => { if (!o) { setCancelOpen(false); setCancelReason(''); } }}>
         <DialogContent className="max-w-md" data-testid="cancel-deal-dialog">
           <DialogHeader>
@@ -354,6 +357,7 @@ export default function DealsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      )}
     </div>
   );
 }
