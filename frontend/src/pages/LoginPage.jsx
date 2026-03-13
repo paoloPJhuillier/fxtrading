@@ -34,9 +34,12 @@ export default function LoginPage() {
     <div className="min-h-screen flex" data-testid="login-page">
       <div className="hidden lg:flex lg:w-1/2 bg-[#08263e] relative items-center justify-center overflow-hidden">
         <img
-          src="https://images.unsplash.com/photo-1768101225267-c6fc5678c113?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1NzR8MHwxfHNlYXJjaHwxfHxtb2Rlcm4lMjBjb3Jwb3JhdGUlMjBhcmNoaXRlY3R1cmUlMjBmaW5hbmNlJTIwYWJzdHJhY3R8ZW58MHx8fHwxNzczMTk4ODI0fDA&ixlib=rb-4.1.0&q=85"
-          alt="Corporate Finance"
+          src="https://images.unsplash.com/photo-1768101225267-c6fc5678c113?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1NzR8MHwxfHNlYXJjaHwxfHxtb2Rlcm4lMjBjb3Jwb3JhdGUlMjBhcmNoaXRlY3R1cmUlMjBmaW5hbmNlJTIwYWJzdHJhY3R8ZW58MHx8fHwxNzczMTk4ODI0fDA&ixlib=rb-4.1.0&q=60&w=800"
+          alt=""
           className="absolute inset-0 w-full h-full object-cover opacity-20"
+          loading="eager"
+          decoding="async"
+          fetchPriority="low"
         />
         <div className="relative z-10 p-12 max-w-lg">
           <TrendingUp className="h-14 w-14 text-[#518dca] mb-8" />

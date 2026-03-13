@@ -26,9 +26,18 @@ const UsersPage = lazy(pageImports.Users);
 const TransactionHistoryPage = lazy(pageImports.TransactionHistory);
 const AuditLogPage = lazy(pageImports.AuditLog);
 
-// Prefetch all page chunks on idle so navigation is instant
+// Prefetch page chunks one at a time with delay to avoid network contention
 function prefetchAllPages() {
-  Object.values(pageImports).forEach(fn => fn());
+  const keys = Object.keys(pageImports);
+  let i = 0;
+  function next() {
+    if (i < keys.length) {
+      pageImports[keys[i]]();
+      i++;
+      setTimeout(next, 150);
+    }
+  }
+  next();
 }
 
 const PageLoader = () => (

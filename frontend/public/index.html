@@ -7,7 +7,7 @@
         <meta name="description" content="A product of emergent.sh" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-        <link href="https://fonts.googleapis.com/css2?family=Chivo:wght@300;400;700;900&family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+        <link href="https://fonts.googleapis.com/css2?family=Chivo:wght@400;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet" media="print" onload="this.media='all'" />
         <!--
         manifest.json provides metadata used when your web app is installed on a
         user's mobile device or desktop. See https://developers.google.com/web/fundamentals/web-app-manifest/
@@ -146,39 +146,7 @@
             });
         </script>
         <script>
-            (function hideBadge() {
-                var badge = document.getElementById('emergent-badge');
-                if (badge) {
-                    badge.style.setProperty('display', 'none', 'important');
-                    badge.style.setProperty('visibility', 'hidden', 'important');
-                    badge.style.setProperty('opacity', '0', 'important');
-                    badge.style.setProperty('pointer-events', 'none', 'important');
-                    badge.style.setProperty('width', '0', 'important');
-                    badge.style.setProperty('height', '0', 'important');
-                    badge.style.setProperty('overflow', 'hidden', 'important');
-                    badge.style.setProperty('position', 'absolute', 'important');
-                    badge.style.setProperty('left', '-9999px', 'important');
-                }
-                var observer = new MutationObserver(function(mutations) {
-                    var b = document.getElementById('emergent-badge');
-                    if (b && b.style.display !== 'none') {
-                        b.style.setProperty('display', 'none', 'important');
-                        b.style.setProperty('visibility', 'hidden', 'important');
-                        b.style.setProperty('opacity', '0', 'important');
-                        b.style.setProperty('pointer-events', 'none', 'important');
-                        b.style.setProperty('width', '0', 'important');
-                        b.style.setProperty('height', '0', 'important');
-                        b.style.setProperty('overflow', 'hidden', 'important');
-                        b.style.setProperty('position', 'absolute', 'important');
-                        b.style.setProperty('left', '-9999px', 'important');
-                    }
-                });
-                observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['style'] });
-                window.addEventListener('load', hideBadge);
-                setTimeout(hideBadge, 500);
-                setTimeout(hideBadge, 1500);
-                setTimeout(hideBadge, 3000);
-            })();
+            // Badge hidden via CSS #emergent-badge { display: none !important; }
         </script>
     </body>
 </html>
