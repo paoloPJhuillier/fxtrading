@@ -40,14 +40,15 @@ export default function TreasuryPage() {
   const [confirmAction, setConfirmAction] = useState(null);
   const [uploading, setUploading] = useState(false);
   const fileRef = useRef(null);
+  const hasLoaded = useRef(false);
 
   useEffect(() => {
-    const t = setTimeout(() => setDebouncedFilter(filter), 400);
+    const t = setTimeout(() => setDebouncedFilter(filter), 250);
     return () => clearTimeout(t);
   }, [filter]);
 
   const load = useCallback(async () => {
-    setLoading(true);
+    if (!hasLoaded.current) setLoading(true);
     try {
       const params = new URLSearchParams();
       params.append('page', page);
@@ -58,6 +59,7 @@ export default function TreasuryPage() {
       if (debouncedFilter.date_to) params.append('date_to', debouncedFilter.date_to);
       const r = await api.get(`/deals?${params.toString()}`);
       setData(r.data);
+      hasLoaded.current = true;
     } catch (e) { console.error(e); }
     finally { setLoading(false); }
   }, [debouncedFilter, page]);

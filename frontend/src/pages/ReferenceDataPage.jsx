@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, memo } from 'react';
+import { useState, useEffect, useCallback, useRef, memo } from 'react';
 import api from '@/lib/api';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -28,9 +28,10 @@ export default function ReferenceDataPage() {
   const [edit, setEdit] = useState(null);
   const [form, setForm] = useState({ name: '', code: '', swift_code: '', type: 'fiat', symbol: '' });
 
+  const hasLoaded = useRef(false);
   const load = useCallback(async () => {
-    setLoading(true);
-    try { const r = await api.get(`/reference/${tab}`); setItems(r.data); }
+    if (!hasLoaded.current) setLoading(true);
+    try { const r = await api.get(`/reference/${tab}`); setItems(r.data); hasLoaded.current = true; }
     catch (e) { console.error(e); }
     finally { setLoading(false); }
   }, [tab]);

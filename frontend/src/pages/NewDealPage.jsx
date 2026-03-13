@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, memo } from 'react';
+import { useState, useEffect, useCallback, useMemo, memo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '@/lib/api';
 import { cn } from '@/lib/utils';
@@ -13,7 +13,7 @@ import { Command, CommandInput, CommandList, CommandEmpty, CommandGroup, Command
 import { Calendar } from '@/components/ui/calendar';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Separator } from '@/components/ui/separator';
-import { CalendarIcon, ArrowLeft, ChevronsUpDown, Check, AlertTriangle } from 'lucide-react';
+import { CalendarIcon, ArrowLeft, ChevronsUpDown, Check, AlertTriangle, Upload, X as XIcon, ImageIcon } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 
@@ -22,6 +22,8 @@ export default function NewDealPage() {
   const [submitting, setSubmitting] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [errors, setErrors] = useState({});
+  const [proofFiles, setProofFiles] = useState([]);
+  const proofRef = useRef(null);
   const [ref, setRef] = useState({ companies: [], banks: [], txTypes: [], tfTypes: [], currencies: [] });
   const [f, setF] = useState({
     transaction_type: '', transfer_type: '', client_name: '',
@@ -100,10 +102,20 @@ export default function NewDealPage() {
     setConfirmOpen(true);
   };
 
+  const addProofFiles = useCallback((e) => {
+    const files = Array.from(e.target.files || []);
+    setProofFiles(p => [...p, ...files]);
+    if (proofRef.current) proofRef.current.value = '';
+  }, []);
+
+  const removeProofFile = useCallback((idx) => {
+    setProofFiles(p => p.filter((_, i) => i !== idx));
+  }, []);
+
   const submit = async () => {
     setSubmitting(true);
     try {
-      await api.post('/deals', {
+      const res = await api.post('/deals', {
         ...f,
         deal_date: format(f.deal_date, 'yyyy-MM-dd'),
         value_date: format(f.value_date, 'yyyy-MM-dd'),
@@ -111,7 +123,17 @@ export default function NewDealPage() {
         amount: parseFloat(f.amount) || 0,
         rate: parseFloat(f.rate) || 0,
       });
-      toast.success('Deal ticket created successfully');
+      const dealId = res.data.id;
+      if (proofFiles.length > 0) {
+        for (const file of proofFiles) {
+          const fd = new FormData();
+          fd.append('file', file);
+          await api.post(`/deals/${dealId}/upload`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+        }
+        toast.success(`Deal created with ${proofFiles.length} proof(s) uploaded`);
+      } else {
+        toast.success('Deal ticket created successfully');
+      }
       navigate('/deals');
     } catch (err) { toast.error(err.response?.data?.detail || 'Failed to create deal'); }
     finally { setSubmitting(false); setConfirmOpen(false); }
@@ -267,6 +289,38 @@ export default function NewDealPage() {
           </CardContent>
         </Card>
 
+        <Card className="mt-6">
+          <CardHeader>
+            <CardTitle className="text-base text-[#08263e]" style={{ fontFamily: 'Chivo' }}>Proof of Payment (optional)</CardTitle>
+            <p className="text-xs text-slate-400 mt-1">Upload settlement proof documents or screenshots</p>
+          </CardHeader>
+          <CardContent>
+            <input type="file" ref={proofRef} className="hidden" accept="image/*,.pdf,.doc,.docx" multiple onChange={addProofFiles} data-testid="proof-file-input" />
+            <Button type="button" variant="outline" className="w-full h-20 border-dashed border-2 hover:border-[#518dca] hover:bg-slate-50" onClick={() => proofRef.current?.click()} data-testid="proof-upload-btn">
+              <div className="flex flex-col items-center gap-1 text-slate-400">
+                <Upload className="h-5 w-5" />
+                <span className="text-xs">Click to select files</span>
+              </div>
+            </Button>
+            {proofFiles.length > 0 && (
+              <div className="mt-3 space-y-2" data-testid="proof-file-list">
+                {proofFiles.map((file, i) => (
+                  <div key={i} className="flex items-center gap-3 p-2 rounded-md bg-slate-50 border" data-testid={`proof-file-${i}`}>
+                    <ImageIcon className="h-4 w-4 text-slate-400 flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-medium truncate">{file.name}</p>
+                      <p className="text-[10px] text-slate-400">{(file.size / 1024).toFixed(1)} KB</p>
+                    </div>
+                    <Button type="button" variant="ghost" size="icon" className="h-6 w-6 flex-shrink-0" onClick={() => removeProofFile(i)} data-testid={`remove-proof-${i}`}>
+                      <XIcon className="h-3 w-3" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
         <div className="flex justify-end gap-3 mt-6 mb-16">
           <Button type="button" variant="outline" onClick={() => navigate('/deals')} data-testid="cancel-btn">Cancel</Button>
           <Button type="submit" className="bg-[#08263e] hover:bg-[#08263e]/90" disabled={submitting} data-testid="submit-deal-btn">
@@ -312,6 +366,12 @@ export default function NewDealPage() {
             {f.ours_type === 'bank' ? (<><CR label="Bank" val={f.ours_bank} /><CR label="Account Number" val={f.ours_account_num} mono /></>) : (<CR label="Wallet Address" val={f.ours_wallet_address} mono />)}
           </div>
           {f.remarks && (<><Separator /><div><p className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Remarks</p><p className="text-sm">{f.remarks}</p></div></>)}
+          {proofFiles.length > 0 && (
+            <div className="bg-blue-50 border border-blue-200 p-3 rounded-md">
+              <p className="text-xs font-medium text-blue-700">{proofFiles.length} proof file(s) will be uploaded</p>
+              <div className="mt-1 space-y-0.5">{proofFiles.map((f, i) => <p key={i} className="text-[10px] text-blue-500 truncate">{f.name}</p>)}</div>
+            </div>
+          )}
           {f.buy_currency && f.sell_currency && f.currency_amount && f.rate && (
             <div className="bg-slate-50 p-3 rounded-md text-center font-mono text-sm font-medium text-[#08263e]">
               {Number(f.currency_amount).toLocaleString()} {f.buy_currency} x {f.rate} = {Number(f.amount).toLocaleString()} {f.sell_currency}

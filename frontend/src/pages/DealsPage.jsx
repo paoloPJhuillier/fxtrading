@@ -42,14 +42,15 @@ export default function DealsPage() {
   const [resubmitting, setResubmitting] = useState(false);
   const fileRef = useRef(null);
   const navigate = useNavigate();
+  const hasLoaded = useRef(false);
 
   useEffect(() => {
-    const t = setTimeout(() => setDebouncedFilter(filter), 400);
+    const t = setTimeout(() => setDebouncedFilter(filter), 250);
     return () => clearTimeout(t);
   }, [filter]);
 
   const fetchDeals = useCallback(async () => {
-    setLoading(true);
+    if (!hasLoaded.current) setLoading(true);
     try {
       const params = new URLSearchParams();
       params.append('page', page);
@@ -61,6 +62,7 @@ export default function DealsPage() {
       if (debouncedFilter.date_to) params.append('date_to', debouncedFilter.date_to);
       const res = await api.get(`/deals?${params.toString()}`);
       setData(res.data);
+      hasLoaded.current = true;
     } catch (err) { console.error(err); }
     finally { setLoading(false); }
   }, [debouncedFilter, page]);

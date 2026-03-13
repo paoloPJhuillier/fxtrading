@@ -29,12 +29,13 @@ export default function TransactionHistoryPage() {
   const sel = _sel || selRef.current;
 
   useEffect(() => {
-    const t = setTimeout(() => setDebouncedFilter(filter), 400);
+    const t = setTimeout(() => setDebouncedFilter(filter), 250);
     return () => clearTimeout(t);
   }, [filter]);
 
+  const hasLoaded = useRef(false);
   const load = useCallback(async () => {
-    setLoading(true);
+    if (!hasLoaded.current) setLoading(true);
     try {
       const params = new URLSearchParams();
       params.append('page', page);
@@ -46,6 +47,7 @@ export default function TransactionHistoryPage() {
       if (debouncedFilter.date_to) params.append('date_to', debouncedFilter.date_to);
       const res = await api.get(`/deals?${params.toString()}`);
       setData(res.data);
+      hasLoaded.current = true;
     } catch (e) { console.error(e); }
     finally { setLoading(false); }
   }, [debouncedFilter, page]);

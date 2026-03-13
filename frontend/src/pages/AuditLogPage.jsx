@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, memo } from 'react';
+import { useState, useEffect, useCallback, useRef, memo } from 'react';
 import api from '@/lib/api';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -36,12 +36,13 @@ export default function AuditLogPage() {
   const [debouncedFilter, setDebouncedFilter] = useState(filter);
 
   useEffect(() => {
-    const t = setTimeout(() => setDebouncedFilter(filter), 400);
+    const t = setTimeout(() => setDebouncedFilter(filter), 250);
     return () => clearTimeout(t);
   }, [filter]);
 
+  const hasLoaded = useRef(false);
   const load = useCallback(async () => {
-    setLoading(true);
+    if (!hasLoaded.current) setLoading(true);
     try {
       const params = new URLSearchParams();
       params.append('page', page);
@@ -53,6 +54,7 @@ export default function AuditLogPage() {
       if (debouncedFilter.date_to) params.append('date_to', debouncedFilter.date_to);
       const res = await api.get(`/audit-logs?${params.toString()}`);
       setData(res.data);
+      hasLoaded.current = true;
     } catch (e) { console.error(e); }
     finally { setLoading(false); }
   }, [page, debouncedFilter]);

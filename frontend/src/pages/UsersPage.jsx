@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, memo } from 'react';
+import { useState, useEffect, useCallback, useRef, memo } from 'react';
 import api from '@/lib/api';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -29,12 +29,13 @@ export default function UsersPage() {
   const [form, setForm] = useState({ name: '', email: '', password: '', role: 'trader' });
 
   useEffect(() => {
-    const t = setTimeout(() => setDebouncedSearch(search), 400);
+    const t = setTimeout(() => setDebouncedSearch(search), 250);
     return () => clearTimeout(t);
   }, [search]);
 
+  const hasLoaded = useRef(false);
   const load = useCallback(async () => {
-    setLoading(true);
+    if (!hasLoaded.current) setLoading(true);
     try {
       const params = new URLSearchParams();
       params.append('page', page);
@@ -42,6 +43,7 @@ export default function UsersPage() {
       if (debouncedSearch) params.append('search', debouncedSearch);
       const r = await api.get(`/users?${params.toString()}`);
       setData(r.data);
+      hasLoaded.current = true;
     } catch (e) { console.error(e); }
     finally { setLoading(false); }
   }, [page, debouncedSearch]);
