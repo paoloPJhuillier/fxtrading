@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useMemo, memo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '@/lib/api';
 import { cn } from '@/lib/utils';
@@ -47,7 +47,8 @@ export default function NewDealPage() {
     }).catch(console.error);
   }, []);
 
-  const up = (k, v) => {
+  // Stable handler — uses only functional updaters, no external deps
+  const up = useCallback((k, v) => {
     setF(p => {
       const next = { ...p, [k]: v };
       if (k === 'currency_amount' || k === 'rate') {
@@ -55,14 +56,21 @@ export default function NewDealPage() {
         const r = parseFloat(k === 'rate' ? v : next.rate) || 0;
         next.amount = (ca > 0 && r > 0) ? (ca * r).toFixed(2) : '';
       }
-      // Reset dependent fields when switching type
       if (k === 'from_type') { next.from_bank = ''; next.from_account_num = ''; next.from_wallet_address = ''; }
       if (k === 'to_type') { next.to_bank = ''; next.to_account_num = ''; next.to_wallet_address = ''; }
       if (k === 'ours_type') { next.ours_bank = ''; next.ours_account_num = ''; next.ours_wallet_address = ''; }
       return next;
     });
-    if (errors[k]) setErrors(p => ({ ...p, [k]: null }));
-  };
+    setErrors(p => p[k] ? { ...p, [k]: null } : p);
+  }, []);
+
+  // Single stable callback for all native inputs (uses e.target.name)
+  const onInput = useCallback(e => up(e.target.name, e.target.value), [up]);
+
+  // Memoized derived arrays — stable refs unless currencies change
+  const fiat = useMemo(() => ref.currencies.filter(c => c.type === 'fiat'), [ref.currencies]);
+  const stablecoin = useMemo(() => ref.currencies.filter(c => c.type === 'stablecoin'), [ref.currencies]);
+  const crypto = useMemo(() => ref.currencies.filter(c => c.type === 'crypto'), [ref.currencies]);
 
   const validate = () => {
     const errs = {};
@@ -70,27 +78,18 @@ export default function NewDealPage() {
     base.forEach(k => { if (!f[k]) errs[k] = 'Required'; });
     if (!f.deal_date) errs.deal_date = 'Required';
     if (!f.value_date) errs.value_date = 'Required';
-    // From section validation
     if (f.from_type === 'bank') {
       if (!f.from_bank) errs.from_bank = 'Required';
       if (!f.from_account_num) errs.from_account_num = 'Required';
-    } else {
-      if (!f.from_wallet_address) errs.from_wallet_address = 'Required';
-    }
-    // To section validation
+    } else { if (!f.from_wallet_address) errs.from_wallet_address = 'Required'; }
     if (f.to_type === 'bank') {
       if (!f.to_bank) errs.to_bank = 'Required';
       if (!f.to_account_num) errs.to_account_num = 'Required';
-    } else {
-      if (!f.to_wallet_address) errs.to_wallet_address = 'Required';
-    }
-    // Ours section validation
+    } else { if (!f.to_wallet_address) errs.to_wallet_address = 'Required'; }
     if (f.ours_type === 'bank') {
       if (!f.ours_bank) errs.ours_bank = 'Required';
       if (!f.ours_account_num) errs.ours_account_num = 'Required';
-    } else {
-      if (!f.ours_wallet_address) errs.ours_wallet_address = 'Required';
-    }
+    } else { if (!f.ours_wallet_address) errs.ours_wallet_address = 'Required'; }
     setErrors(errs);
     return Object.keys(errs).length === 0;
   };
@@ -118,23 +117,6 @@ export default function NewDealPage() {
     finally { setSubmitting(false); setConfirmOpen(false); }
   };
 
-  const fiat = ref.currencies.filter(c => c.type === 'fiat');
-  const stablecoin = ref.currencies.filter(c => c.type === 'stablecoin');
-  const crypto = ref.currencies.filter(c => c.type === 'crypto');
-
-  const TypeToggle = ({ value, onChange, testId }) => (
-    <div className="flex gap-1 p-0.5 bg-slate-100 rounded-md w-fit">
-      <button type="button" onClick={() => onChange('bank')} data-testid={`${testId}-bank`}
-        className={`px-3 py-1 text-xs font-medium rounded transition-all ${value === 'bank' ? 'bg-[#08263e] text-white shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
-        Bank
-      </button>
-      <button type="button" onClick={() => onChange('crypto')} data-testid={`${testId}-crypto`}
-        className={`px-3 py-1 text-xs font-medium rounded transition-all ${value === 'crypto' ? 'bg-[#08263e] text-white shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
-        Crypto
-      </button>
-    </div>
-  );
-
   return (
     <div data-testid="new-deal-page">
       <div className="flex items-center gap-4 mb-8">
@@ -151,7 +133,7 @@ export default function NewDealPage() {
             <CardHeader><CardTitle className="text-base text-[#08263e]" style={{ fontFamily: 'Chivo' }}>Deal Information</CardTitle></CardHeader>
             <CardContent className="space-y-4">
               <VField label="Client Name" error={errors.client_name}>
-                <Input value={f.client_name} onChange={e => up('client_name', e.target.value)} placeholder="Enter client name" data-testid="client-name-input" className={errors.client_name ? 'border-red-400' : ''} />
+                <Input name="client_name" value={f.client_name} onChange={onInput} placeholder="Enter client name" data-testid="client-name-input" className={errors.client_name ? 'border-red-400' : ''} />
               </VField>
               <div className="grid grid-cols-2 gap-4">
                 <VField label="Transaction Type" error={errors.transaction_type}>
@@ -168,8 +150,8 @@ export default function NewDealPage() {
                 </VField>
               </div>
               <div className="grid grid-cols-2 gap-4">
-                <DatePick label="Deal Date" value={f.deal_date} onChange={v => up('deal_date', v)} tid="deal-date" error={errors.deal_date} />
-                <DatePick label="Value Date" value={f.value_date} onChange={v => up('value_date', v)} tid="value-date" error={errors.value_date} />
+                <DatePick label="Deal Date" value={f.deal_date} name="deal_date" onChange={up} tid="deal-date" error={errors.deal_date} />
+                <DatePick label="Value Date" value={f.value_date} name="value_date" onChange={up} tid="value-date" error={errors.value_date} />
               </div>
             </CardContent>
           </Card>
@@ -178,15 +160,15 @@ export default function NewDealPage() {
             <CardHeader><CardTitle className="text-base text-[#08263e]" style={{ fontFamily: 'Chivo' }}>Amounts & Currency</CardTitle></CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
-                <CurrSel label="Buy Currency" value={f.buy_currency} onChange={v => up('buy_currency', v)} fiat={fiat} stablecoin={stablecoin} crypto={crypto} tid="buy-currency" error={errors.buy_currency} />
-                <CurrSel label="Sell Currency" value={f.sell_currency} onChange={v => up('sell_currency', v)} fiat={fiat} stablecoin={stablecoin} crypto={crypto} tid="sell-currency" error={errors.sell_currency} />
+                <CurrSel label="Buy Currency" value={f.buy_currency} name="buy_currency" onChange={up} fiat={fiat} stablecoin={stablecoin} crypto={crypto} tid="buy-currency" error={errors.buy_currency} />
+                <CurrSel label="Sell Currency" value={f.sell_currency} name="sell_currency" onChange={up} fiat={fiat} stablecoin={stablecoin} crypto={crypto} tid="sell-currency" error={errors.sell_currency} />
               </div>
               <div className="grid grid-cols-3 gap-4">
                 <VField label={`Currency Amount${f.buy_currency ? ` (${f.buy_currency})` : ''}`} error={errors.currency_amount}>
-                  <Input type="number" step="0.01" value={f.currency_amount} onChange={e => up('currency_amount', e.target.value)} placeholder="0.00" data-testid="currency-amount-input" className={errors.currency_amount ? 'border-red-400' : ''} />
+                  <Input name="currency_amount" type="number" step="0.01" value={f.currency_amount} onChange={onInput} placeholder="0.00" data-testid="currency-amount-input" className={errors.currency_amount ? 'border-red-400' : ''} />
                 </VField>
                 <VField label="Exchange Rate" error={errors.rate}>
-                  <Input type="number" step="0.000001" value={f.rate} onChange={e => up('rate', e.target.value)} placeholder="0.000000" data-testid="rate-input" className={errors.rate ? 'border-red-400' : ''} />
+                  <Input name="rate" type="number" step="0.000001" value={f.rate} onChange={onInput} placeholder="0.000000" data-testid="rate-input" className={errors.rate ? 'border-red-400' : ''} />
                 </VField>
                 <VField label={`Converted Amount${f.sell_currency ? ` (${f.sell_currency})` : ''}`}>
                   <Input type="number" step="0.01" value={f.amount} readOnly className="bg-slate-50 font-medium" placeholder="0.00" data-testid="amount-input" />
@@ -204,21 +186,21 @@ export default function NewDealPage() {
             <CardHeader>
               <div className="flex items-center justify-between">
                 <CardTitle className="text-base text-[#08263e]" style={{ fontFamily: 'Chivo' }}>Source (From)</CardTitle>
-                <TypeToggle value={f.from_type} onChange={v => up('from_type', v)} testId="from-type" />
+                <TypeToggle value={f.from_type} name="from_type" onChange={up} testId="from-type" />
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
-              <SearchSelect label="Company" value={f.from_company} onChange={v => up('from_company', v)} items={ref.companies} displayKey="name" tid="from-company" placeholder="Search company..." error={errors.from_company} />
+              <SearchSelect label="Company" value={f.from_company} name="from_company" onChange={up} items={ref.companies} displayKey="name" tid="from-company" placeholder="Search company..." error={errors.from_company} />
               {f.from_type === 'bank' ? (
                 <>
-                  <SearchSelect label="Bank" value={f.from_bank} onChange={v => up('from_bank', v)} items={ref.banks} displayKey="name" tid="from-bank" placeholder="Search bank..." error={errors.from_bank} />
+                  <SearchSelect label="Bank" value={f.from_bank} name="from_bank" onChange={up} items={ref.banks} displayKey="name" tid="from-bank" placeholder="Search bank..." error={errors.from_bank} />
                   <VField label="Account Number" error={errors.from_account_num}>
-                    <Input value={f.from_account_num} onChange={e => up('from_account_num', e.target.value)} placeholder="Enter account number" data-testid="from-account-input" className={errors.from_account_num ? 'border-red-400' : ''} />
+                    <Input name="from_account_num" value={f.from_account_num} onChange={onInput} placeholder="Enter account number" data-testid="from-account-input" className={errors.from_account_num ? 'border-red-400' : ''} />
                   </VField>
                 </>
               ) : (
                 <VField label="Wallet Address" error={errors.from_wallet_address}>
-                  <Input value={f.from_wallet_address} onChange={e => up('from_wallet_address', e.target.value)} placeholder="Enter crypto wallet address" data-testid="from-wallet-input" className={errors.from_wallet_address ? 'border-red-400' : ''} />
+                  <Input name="from_wallet_address" value={f.from_wallet_address} onChange={onInput} placeholder="Enter crypto wallet address" data-testid="from-wallet-input" className={errors.from_wallet_address ? 'border-red-400' : ''} />
                 </VField>
               )}
             </CardContent>
@@ -228,21 +210,21 @@ export default function NewDealPage() {
             <CardHeader>
               <div className="flex items-center justify-between">
                 <CardTitle className="text-base text-[#08263e]" style={{ fontFamily: 'Chivo' }}>Destination (To)</CardTitle>
-                <TypeToggle value={f.to_type} onChange={v => up('to_type', v)} testId="to-type" />
+                <TypeToggle value={f.to_type} name="to_type" onChange={up} testId="to-type" />
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
-              <SearchSelect label="Company" value={f.to_company} onChange={v => up('to_company', v)} items={ref.companies} displayKey="name" tid="to-company" placeholder="Search company..." error={errors.to_company} />
+              <SearchSelect label="Company" value={f.to_company} name="to_company" onChange={up} items={ref.companies} displayKey="name" tid="to-company" placeholder="Search company..." error={errors.to_company} />
               {f.to_type === 'bank' ? (
                 <>
-                  <SearchSelect label="Bank" value={f.to_bank} onChange={v => up('to_bank', v)} items={ref.banks} displayKey="name" tid="to-bank" placeholder="Search bank..." error={errors.to_bank} />
+                  <SearchSelect label="Bank" value={f.to_bank} name="to_bank" onChange={up} items={ref.banks} displayKey="name" tid="to-bank" placeholder="Search bank..." error={errors.to_bank} />
                   <VField label="Account Number" error={errors.to_account_num}>
-                    <Input value={f.to_account_num} onChange={e => up('to_account_num', e.target.value)} placeholder="Enter account number" data-testid="to-account-input" className={errors.to_account_num ? 'border-red-400' : ''} />
+                    <Input name="to_account_num" value={f.to_account_num} onChange={onInput} placeholder="Enter account number" data-testid="to-account-input" className={errors.to_account_num ? 'border-red-400' : ''} />
                   </VField>
                 </>
               ) : (
                 <VField label="Wallet Address" error={errors.to_wallet_address}>
-                  <Input value={f.to_wallet_address} onChange={e => up('to_wallet_address', e.target.value)} placeholder="Enter crypto wallet address" data-testid="to-wallet-input" className={errors.to_wallet_address ? 'border-red-400' : ''} />
+                  <Input name="to_wallet_address" value={f.to_wallet_address} onChange={onInput} placeholder="Enter crypto wallet address" data-testid="to-wallet-input" className={errors.to_wallet_address ? 'border-red-400' : ''} />
                 </VField>
               )}
             </CardContent>
@@ -256,21 +238,21 @@ export default function NewDealPage() {
                 <CardTitle className="text-base text-[#08263e]" style={{ fontFamily: 'Chivo' }}>Ours (Receiving Account)</CardTitle>
                 <p className="text-xs text-slate-400 mt-1">Account where the client credits us</p>
               </div>
-              <TypeToggle value={f.ours_type} onChange={v => up('ours_type', v)} testId="ours-type" />
+              <TypeToggle value={f.ours_type} name="ours_type" onChange={up} testId="ours-type" />
             </div>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {f.ours_type === 'bank' ? (
                 <>
-                  <SearchSelect label="Bank" value={f.ours_bank} onChange={v => up('ours_bank', v)} items={ref.banks} displayKey="name" tid="ours-bank" placeholder="Search bank..." error={errors.ours_bank} />
+                  <SearchSelect label="Bank" value={f.ours_bank} name="ours_bank" onChange={up} items={ref.banks} displayKey="name" tid="ours-bank" placeholder="Search bank..." error={errors.ours_bank} />
                   <VField label="Account Number" error={errors.ours_account_num}>
-                    <Input value={f.ours_account_num} onChange={e => up('ours_account_num', e.target.value)} placeholder="Enter account number" data-testid="ours-account-input" className={errors.ours_account_num ? 'border-red-400' : ''} />
+                    <Input name="ours_account_num" value={f.ours_account_num} onChange={onInput} placeholder="Enter account number" data-testid="ours-account-input" className={errors.ours_account_num ? 'border-red-400' : ''} />
                   </VField>
                 </>
               ) : (
                 <VField label="Wallet Address" error={errors.ours_wallet_address}>
-                  <Input value={f.ours_wallet_address} onChange={e => up('ours_wallet_address', e.target.value)} placeholder="Enter crypto wallet address" data-testid="ours-wallet-input" className={errors.ours_wallet_address ? 'border-red-400' : ''} />
+                  <Input name="ours_wallet_address" value={f.ours_wallet_address} onChange={onInput} placeholder="Enter crypto wallet address" data-testid="ours-wallet-input" className={errors.ours_wallet_address ? 'border-red-400' : ''} />
                 </VField>
               )}
             </div>
@@ -280,7 +262,7 @@ export default function NewDealPage() {
         <Card className="mt-6">
           <CardContent className="pt-6">
             <VField label="Remarks (optional)">
-              <Textarea value={f.remarks} onChange={e => up('remarks', e.target.value)} placeholder="Additional notes..." rows={3} data-testid="remarks-input" />
+              <Textarea name="remarks" value={f.remarks} onChange={onInput} placeholder="Additional notes..." rows={3} data-testid="remarks-input" />
             </VField>
           </CardContent>
         </Card>
@@ -360,8 +342,27 @@ function CR({ label, val, mono }) {
   return (<div><p className="text-[10px] text-slate-400 uppercase tracking-wider">{label}</p><p className={`text-sm font-medium ${mono ? 'font-mono' : ''}`}>{val || '-'}</p></div>);
 }
 
-function DatePick({ label, value, onChange, tid, error }) {
+// Memo'd — stable onChange(name, value) + name prop prevents re-renders
+const TypeToggle = memo(function TypeToggle({ value, name, onChange, testId }) {
+  return (
+    <div className="flex gap-1 p-0.5 bg-slate-100 rounded-md w-fit">
+      <button type="button" onClick={() => onChange(name, 'bank')} data-testid={`${testId}-bank`}
+        className={`px-3 py-1 text-xs font-medium rounded transition-all ${value === 'bank' ? 'bg-[#08263e] text-white shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+        Bank
+      </button>
+      <button type="button" onClick={() => onChange(name, 'crypto')} data-testid={`${testId}-crypto`}
+        className={`px-3 py-1 text-xs font-medium rounded transition-all ${value === 'crypto' ? 'bg-[#08263e] text-white shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+        Crypto
+      </button>
+    </div>
+  );
+});
+
+const DatePick = memo(function DatePick({ label, value, name, onChange, tid, error }) {
   const [open, setOpen] = useState(false);
+  const handleSelect = useCallback(d => {
+    if (d) { onChange(name, d); setOpen(false); }
+  }, [onChange, name]);
   return (
     <VField label={label} error={error}>
       <Popover open={open} onOpenChange={setOpen}>
@@ -372,16 +373,20 @@ function DatePick({ label, value, onChange, tid, error }) {
           </Button>
         </PopoverTrigger>
         <PopoverContent className="w-auto p-0" align="start">
-          <Calendar mode="single" selected={value} onSelect={d => { if (d) { onChange(d); setOpen(false); } }} />
+          <Calendar mode="single" selected={value} onSelect={handleSelect} />
         </PopoverContent>
       </Popover>
     </VField>
   );
-}
+});
 
-function SearchSelect({ label, value, onChange, items, displayKey, tid, placeholder, error }) {
+const SearchSelect = memo(function SearchSelect({ label, value, name, onChange, items, displayKey, tid, placeholder, error }) {
   const [open, setOpen] = useState(false);
   const selected = items.find(i => i[displayKey] === value);
+  const handleSelect = useCallback(val => {
+    onChange(name, val);
+    setOpen(false);
+  }, [onChange, name]);
   return (
     <VField label={label} error={error}>
       <Popover open={open} onOpenChange={setOpen}>
@@ -398,7 +403,7 @@ function SearchSelect({ label, value, onChange, items, displayKey, tid, placehol
               <CommandEmpty>No results found.</CommandEmpty>
               <CommandGroup>
                 {items.map(item => (
-                  <CommandItem key={item.id} value={item[displayKey]} onSelect={() => { onChange(item[displayKey]); setOpen(false); }}>
+                  <CommandItem key={item.id} value={item[displayKey]} onSelect={() => handleSelect(item[displayKey])}>
                     <Check className={cn("mr-2 h-3 w-3", value === item[displayKey] ? "opacity-100" : "opacity-0")} />
                     <span className="text-sm">{item[displayKey]}</span>
                     {item.code && <span className="ml-auto text-xs text-slate-400 font-mono">{item.code}</span>}
@@ -411,12 +416,26 @@ function SearchSelect({ label, value, onChange, items, displayKey, tid, placehol
       </Popover>
     </VField>
   );
-}
+});
 
-function CurrSel({ label, value, onChange, fiat, stablecoin, crypto, tid, error }) {
+const CurrItem = memo(function CurrItem({ c, value, onSelect }) {
+  return (
+    <CommandItem value={`${c.code} ${c.name}`} onSelect={() => onSelect(c.code)}>
+      <Check className={cn("mr-2 h-3 w-3", value === c.code ? "opacity-100" : "opacity-0")} />
+      <span className="font-mono text-xs mr-2">{c.code}</span>
+      <span className="text-xs text-slate-500 truncate">{c.name}</span>
+    </CommandItem>
+  );
+});
+
+const CurrSel = memo(function CurrSel({ label, value, name, onChange, fiat, stablecoin, crypto, tid, error }) {
   const [open, setOpen] = useState(false);
-  const all = [...fiat, ...stablecoin, ...crypto];
+  const all = useMemo(() => [...fiat, ...stablecoin, ...crypto], [fiat, stablecoin, crypto]);
   const selected = all.find(c => c.code === value);
+  const handleSelect = useCallback(code => {
+    onChange(name, code);
+    setOpen(false);
+  }, [onChange, name]);
   return (
     <VField label={label} error={error}>
       <Popover open={open} onOpenChange={setOpen}>
@@ -431,23 +450,13 @@ function CurrSel({ label, value, onChange, fiat, stablecoin, crypto, tid, error 
             <CommandInput placeholder="Type to search..." data-testid={`${tid}-search`} />
             <CommandList>
               <CommandEmpty>No currency found.</CommandEmpty>
-              {fiat.length > 0 && <CommandGroup heading="Fiat Currencies">{fiat.map(c => <CurrItem key={c.id} c={c} value={value} onChange={onChange} setOpen={setOpen} />)}</CommandGroup>}
-              {stablecoin.length > 0 && <CommandGroup heading="Stablecoins">{stablecoin.map(c => <CurrItem key={c.id} c={c} value={value} onChange={onChange} setOpen={setOpen} />)}</CommandGroup>}
-              {crypto.length > 0 && <CommandGroup heading="Cryptocurrencies">{crypto.map(c => <CurrItem key={c.id} c={c} value={value} onChange={onChange} setOpen={setOpen} />)}</CommandGroup>}
+              {fiat.length > 0 && <CommandGroup heading="Fiat Currencies">{fiat.map(c => <CurrItem key={c.id} c={c} value={value} onSelect={handleSelect} />)}</CommandGroup>}
+              {stablecoin.length > 0 && <CommandGroup heading="Stablecoins">{stablecoin.map(c => <CurrItem key={c.id} c={c} value={value} onSelect={handleSelect} />)}</CommandGroup>}
+              {crypto.length > 0 && <CommandGroup heading="Cryptocurrencies">{crypto.map(c => <CurrItem key={c.id} c={c} value={value} onSelect={handleSelect} />)}</CommandGroup>}
             </CommandList>
           </Command>
         </PopoverContent>
       </Popover>
     </VField>
   );
-}
-
-function CurrItem({ c, value, onChange, setOpen }) {
-  return (
-    <CommandItem value={`${c.code} ${c.name}`} onSelect={() => { onChange(c.code); setOpen(false); }}>
-      <Check className={cn("mr-2 h-3 w-3", value === c.code ? "opacity-100" : "opacity-0")} />
-      <span className="font-mono text-xs mr-2">{c.code}</span>
-      <span className="text-xs text-slate-500 truncate">{c.name}</span>
-    </CommandItem>
-  );
-}
+});

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, memo } from 'react';
 import api from '@/lib/api';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -38,11 +38,11 @@ export default function ReferenceDataPage() {
   useEffect(() => { load(); }, [load]);
 
   const openNew = () => { setEdit(null); setForm({ name: '', code: '', swift_code: '', type: 'fiat', symbol: '' }); setOpen(true); };
-  const openEdit = (item) => {
+  const openEdit = useCallback((item) => {
     setEdit(item);
     setForm({ name: item.name, code: item.code, swift_code: item.swift_code || '', type: item.type || 'fiat', symbol: item.symbol || '' });
     setOpen(true);
-  };
+  }, []);
 
   const save = async () => {
     try {
@@ -57,11 +57,11 @@ export default function ReferenceDataPage() {
     } catch (e) { toast.error(e.response?.data?.detail || 'Save failed'); }
   };
 
-  const del = async (id) => {
+  const del = useCallback(async (id) => {
     if (!window.confirm('Delete this item?')) return;
     try { await api.delete(`/reference/${tab}/${id}`); toast.success('Deleted'); load(); }
     catch (e) { toast.error('Delete failed'); }
-  };
+  }, [tab, load]);
 
   const isBank = tab === 'banks';
   const isCurr = tab === 'currencies';
@@ -87,11 +87,12 @@ export default function ReferenceDataPage() {
           <TabsContent key={t.value} value={t.value}>
             <Card>
               <CardContent className="p-0">
-                {loading ? (
+                {loading && items.length === 0 ? (
                   <div className="flex items-center justify-center h-32"><div className="animate-spin h-6 w-6 border-4 border-[#518dca] border-t-transparent rounded-full" /></div>
                 ) : items.length === 0 ? (
                   <p className="text-center py-16 text-slate-400">No items. Click "Add New" to create one.</p>
                 ) : (
+                  <div className={loading ? 'opacity-60 pointer-events-none transition-opacity' : 'transition-opacity'}>
                   <Table>
                     <TableHeader>
                       <TableRow className="bg-slate-50">
@@ -105,27 +106,11 @@ export default function ReferenceDataPage() {
                     </TableHeader>
                     <TableBody>
                       {items.map(item => (
-                        <TableRow key={item.id} data-testid={`ref-item-${item.id}`}>
-                          <TableCell className="font-medium text-sm">{item.name}</TableCell>
-                          <TableCell className="font-mono text-xs">{item.code}</TableCell>
-                          {isBank && <TableCell className="font-mono text-xs">{item.swift_code || '-'}</TableCell>}
-                          {isCurr && (
-                            <>
-                              <TableCell><Badge variant={item.type === 'crypto' ? 'secondary' : item.type === 'stablecoin' ? 'outline' : 'outline'} className={`text-xs ${item.type === 'stablecoin' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : ''}`}>{item.type}</Badge></TableCell>
-                              <TableCell className="text-sm">{item.symbol}</TableCell>
-                            </>
-                          )}
-                          <TableCell><Badge className={item.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}>{item.is_active ? 'Active' : 'Inactive'}</Badge></TableCell>
-                          <TableCell className="text-right">
-                            <div className="flex justify-end gap-1">
-                              <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => openEdit(item)} data-testid={`edit-${item.id}`}><Pencil className="h-3 w-3" /></Button>
-                              <Button size="icon" variant="ghost" className="h-8 w-8 text-red-500 hover:text-red-700" onClick={() => del(item.id)} data-testid={`delete-${item.id}`}><Trash2 className="h-3 w-3" /></Button>
-                            </div>
-                          </TableCell>
-                        </TableRow>
+                        <RefRow key={item.id} item={item} isBank={isBank} isCurr={isCurr} onEdit={openEdit} onDelete={del} />
                       ))}
                     </TableBody>
                   </Table>
+                  </div>
                 )}
               </CardContent>
             </Card>
@@ -182,3 +167,26 @@ export default function ReferenceDataPage() {
     </div>
   );
 }
+
+const RefRow = memo(function RefRow({ item, isBank, isCurr, onEdit, onDelete }) {
+  return (
+    <TableRow data-testid={`ref-item-${item.id}`}>
+      <TableCell className="font-medium text-sm">{item.name}</TableCell>
+      <TableCell className="font-mono text-xs">{item.code}</TableCell>
+      {isBank && <TableCell className="font-mono text-xs">{item.swift_code || '-'}</TableCell>}
+      {isCurr && (
+        <>
+          <TableCell><Badge variant={item.type === 'crypto' ? 'secondary' : 'outline'} className={`text-xs ${item.type === 'stablecoin' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : ''}`}>{item.type}</Badge></TableCell>
+          <TableCell className="text-sm">{item.symbol}</TableCell>
+        </>
+      )}
+      <TableCell><Badge className={item.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}>{item.is_active ? 'Active' : 'Inactive'}</Badge></TableCell>
+      <TableCell className="text-right">
+        <div className="flex justify-end gap-1">
+          <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => onEdit(item)} data-testid={`edit-${item.id}`}><Pencil className="h-3 w-3" /></Button>
+          <Button size="icon" variant="ghost" className="h-8 w-8 text-red-500 hover:text-red-700" onClick={() => onDelete(item.id)} data-testid={`delete-${item.id}`}><Trash2 className="h-3 w-3" /></Button>
+        </div>
+      </TableCell>
+    </TableRow>
+  );
+});
