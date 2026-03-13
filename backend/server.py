@@ -305,7 +305,7 @@ async def export_deals_csv(
         query.setdefault("deal_date", {})["$gte"] = date_from
     if date_to:
         query.setdefault("deal_date", {})["$lte"] = date_to
-    deals = await db.deals.find(query, {"_id": 0}).sort("created_at", -1).to_list(100000)
+    deals = await db.deals.find(query, {"_id": 0}).sort("created_at", -1).to_list(10000)
     output = io.StringIO()
     fields = ["reference_number", "client_name", "transaction_type", "transfer_type", "deal_date", "value_date",
               "buy_currency", "sell_currency", "currency_amount", "rate", "amount",
@@ -351,7 +351,8 @@ async def list_deals(
         query.setdefault("deal_date", {})["$lte"] = date_to
     total = await db.deals.count_documents(query)
     skip = (page - 1) * limit
-    deals = await db.deals.find(query, {"_id": 0}).sort("created_at", -1).skip(skip).limit(limit).to_list(limit)
+    list_projection = {"_id": 0, "id": 1, "reference_number": 1, "client_name": 1, "transaction_type": 1, "transfer_type": 1, "buy_currency": 1, "sell_currency": 1, "currency_amount": 1, "amount": 1, "rate": 1, "deal_date": 1, "value_date": 1, "status": 1, "created_at": 1, "created_by_name": 1, "from_type": 1, "from_company": 1, "from_bank": 1, "from_account_num": 1, "from_wallet_address": 1, "to_type": 1, "to_company": 1, "to_bank": 1, "to_account_num": 1, "to_wallet_address": 1, "ours_type": 1, "ours_bank": 1, "ours_account_num": 1, "ours_wallet_address": 1, "remarks": 1, "treasury_remarks": 1, "cancellation_reason": 1, "processed_by_name": 1, "processed_at": 1, "settlement_proofs": 1}
+    deals = await db.deals.find(query, list_projection).sort("created_at", -1).skip(skip).limit(limit).to_list(limit)
     return {"deals": deals, "total": total, "page": page, "pages": (total + limit - 1) // limit if total > 0 else 1}
 
 @api_router.post("/deals")
@@ -515,7 +516,7 @@ def get_col(entity_type: str):
 @api_router.get("/reference/{entity_type}")
 async def list_reference(entity_type: str, user=Depends(get_current_user)):
     col = get_col(entity_type)
-    items = await db[col].find({}, {"_id": 0}).to_list(10000)
+    items = await db[col].find({}, {"_id": 0}).to_list(1000)
     return items
 
 @api_router.post("/reference/{entity_type}")
