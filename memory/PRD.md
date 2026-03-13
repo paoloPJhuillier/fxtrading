@@ -59,6 +59,7 @@ Mobile-responsive full-stack FX Trading Tracker platform with:
 - [x] **Instant Deal Dialog (Mar 2026):** Eliminated redundant API call when viewing deal detail on My Deals page — dialog now opens in 78ms using data already in table row.
 - [x] **Dashboard Stats Caching (Mar 2026):** Module-level cache (`statsCache`, `cachedRange`) persists across unmount/remount. Return navigation to Dashboard renders in ~128ms with zero skeleton/loading states. Cache invalidates automatically on date range change. Verified for all 3 roles.
 - [x] **Dashboard Chart Performance (Mar 2026):** Disabled recharts default animations (`isAnimationActive={false}`) on Bar and Pie charts — eliminates 1.5s SVG animation jank. Extracted DealsChart/StatusChart as memo'd components. Memoized pieData with useMemo and Metric with React.memo.
+- [x] **Idle Page Prefetching (Mar 2026):** All React.lazy page chunks are prefetched via `requestIdleCallback` after login. Eliminates Suspense spinner on first navigation to any page. New Deal page loads in ~108ms on repeat visits.
 
 ## P0/P1/P2 Backlog
 - No pending issues or feature requests. All performance optimizations complete.

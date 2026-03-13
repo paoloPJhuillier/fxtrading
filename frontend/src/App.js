@@ -1,19 +1,35 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useEffect } from 'react';
 import { Toaster } from 'sonner';
 import { AuthProvider, useAuth } from '@/lib/auth';
 import { RefDataProvider } from '@/lib/refdata';
 import Layout from '@/components/Layout';
 import LoginPage from '@/pages/LoginPage';
 
-const DashboardPage = lazy(() => import('@/pages/DashboardPage'));
-const DealsPage = lazy(() => import('@/pages/DealsPage'));
-const NewDealPage = lazy(() => import('@/pages/NewDealPage'));
-const TreasuryPage = lazy(() => import('@/pages/TreasuryPage'));
-const ReferenceDataPage = lazy(() => import('@/pages/ReferenceDataPage'));
-const UsersPage = lazy(() => import('@/pages/UsersPage'));
-const TransactionHistoryPage = lazy(() => import('@/pages/TransactionHistoryPage'));
-const AuditLogPage = lazy(() => import('@/pages/AuditLogPage'));
+const pageImports = {
+  Dashboard: () => import('@/pages/DashboardPage'),
+  Deals: () => import('@/pages/DealsPage'),
+  NewDeal: () => import('@/pages/NewDealPage'),
+  Treasury: () => import('@/pages/TreasuryPage'),
+  ReferenceData: () => import('@/pages/ReferenceDataPage'),
+  Users: () => import('@/pages/UsersPage'),
+  TransactionHistory: () => import('@/pages/TransactionHistoryPage'),
+  AuditLog: () => import('@/pages/AuditLogPage'),
+};
+
+const DashboardPage = lazy(pageImports.Dashboard);
+const DealsPage = lazy(pageImports.Deals);
+const NewDealPage = lazy(pageImports.NewDeal);
+const TreasuryPage = lazy(pageImports.Treasury);
+const ReferenceDataPage = lazy(pageImports.ReferenceData);
+const UsersPage = lazy(pageImports.Users);
+const TransactionHistoryPage = lazy(pageImports.TransactionHistory);
+const AuditLogPage = lazy(pageImports.AuditLog);
+
+// Prefetch all page chunks on idle so navigation is instant
+function prefetchAllPages() {
+  Object.values(pageImports).forEach(fn => fn());
+}
 
 const PageLoader = () => (
   <div className="flex items-center justify-center h-32">
@@ -34,6 +50,19 @@ function ProtectedRoute({ children }) {
 
 function AppRoutes() {
   const { user, loading } = useAuth();
+
+  // After login, prefetch all page chunks on idle
+  useEffect(() => {
+    if (!user) return;
+    if ('requestIdleCallback' in window) {
+      const id = requestIdleCallback(prefetchAllPages);
+      return () => cancelIdleCallback(id);
+    } else {
+      const id = setTimeout(prefetchAllPages, 1000);
+      return () => clearTimeout(id);
+    }
+  }, [user]);
+
   if (loading) return null;
   return (
     <Suspense fallback={<PageLoader />}>
