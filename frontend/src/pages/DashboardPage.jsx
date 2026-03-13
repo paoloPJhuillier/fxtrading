@@ -27,6 +27,9 @@ const STATUS_COLORS = {
 
 const PIE_COLORS = ['#f59e0b', '#10b981', '#ec474e'];
 
+// Module-level cache persists across unmount/remount
+let statsCache = null;
+
 function formatVol(v) {
   if (v >= 1e6) return `${(v / 1e6).toFixed(1)}M`;
   if (v >= 1e3) return `${(v / 1e3).toFixed(1)}K`;
@@ -35,17 +38,16 @@ function formatVol(v) {
 
 export default function DashboardPage() {
   const { user } = useAuth();
-  const [stats, setStats] = useState(null);
+  const [stats, setStats] = useState(statsCache);
   const [range, setRange] = useState('30d');
-  const [loading, setLoading] = useState(true);
-  const hasData = useRef(false);
+  const [loading, setLoading] = useState(!statsCache);
 
   const fetchStats = useCallback(async () => {
-    if (!hasData.current) setLoading(true);
+    if (!stats && !statsCache) setLoading(true);
     try {
       const res = await api.get(`/dashboard/stats?range=${range}`);
       setStats(res.data);
-      hasData.current = true;
+      statsCache = res.data;
     } catch (err) { console.error(err); }
     finally { setLoading(false); }
   }, [range]);
