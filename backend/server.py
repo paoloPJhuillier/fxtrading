@@ -80,16 +80,22 @@ class LoginRequest(BaseModel):
 
 class UserCreate(BaseModel):
     email: str
-    name: str
+    first_name: str
+    last_name: str
     password: str
     role: str
 
 class UserUpdate(BaseModel):
-    name: Optional[str] = None
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
     email: Optional[str] = None
     role: Optional[str] = None
     is_active: Optional[bool] = None
     password: Optional[str] = None
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str
 
 class DealCreate(BaseModel):
     transaction_type: str
@@ -142,12 +148,20 @@ class ReferenceItemUpdate(BaseModel):
 
 
 # --- Auth Helpers ---
-def create_token(user_id: str, email: str, role: str, name: str):
+def user_full_name(user: dict) -> str:
+    fn = user.get("first_name", "")
+    ln = user.get("last_name", "")
+    if fn or ln:
+        return f"{fn} {ln}".strip()
+    return user.get("name", "")
+
+def create_token(user_id: str, email: str, role: str, first_name: str, last_name: str):
     payload = {
         "sub": user_id,
         "email": email,
         "role": role,
-        "name": name,
+        "first_name": first_name,
+        "last_name": last_name,
         "exp": datetime.now(timezone.utc) + timedelta(hours=JWT_EXPIRATION_HOURS)
     }
     return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
@@ -191,7 +205,7 @@ async def log_audit(action: str, user: dict, entity_type: str, entity_id: str, e
         "entity_id": entity_id,
         "entity_ref": entity_ref,
         "user_id": user["id"],
-        "user_name": user["name"],
+        "user_name": user_full_name(user),
         "user_role": user["role"],
         "details": details,
         "metadata": metadata or {},
@@ -208,15 +222,28 @@ async def login(req: LoginRequest):
         raise HTTPException(status_code=401, detail="Invalid credentials")
     if not user.get("is_active", True):
         raise HTTPException(status_code=401, detail="Account disabled")
-    token = create_token(user["id"], user["email"], user["role"], user["name"])
+    fn = user.get("first_name", "")
+    ln = user.get("last_name", "")
+    token = create_token(user["id"], user["email"], user["role"], fn, ln)
     return {
         "token": token,
-        "user": {"id": user["id"], "email": user["email"], "name": user["name"], "role": user["role"]}
+        "user": {"id": user["id"], "email": user["email"], "first_name": fn, "last_name": ln, "role": user["role"]}
     }
 
 @api_router.get("/auth/me")
 async def get_me(user=Depends(get_current_user)):
     return user
+
+@api_router.put("/auth/change-password")
+async def change_password(req: ChangePasswordRequest, user=Depends(get_current_user)):
+    full_user = await db.users.find_one({"id": user["id"]}, {"_id": 0})
+    if not full_user or not pwd_context.verify(req.current_password, full_user["password_hash"]):
+        raise HTTPException(status_code=400, detail="Current password is incorrect")
+    if len(req.new_password) < 4:
+        raise HTTPException(status_code=400, detail="New password must be at least 4 characters")
+    await db.users.update_one({"id": user["id"]}, {"$set": {"password_hash": pwd_context.hash(req.new_password)}})
+    await log_audit("password_changed", user, "user", user["id"], user.get("email", ""), "User changed their password")
+    return {"message": "Password changed successfully"}
 
 
 # --- User Management (Admin) ---
@@ -231,7 +258,8 @@ async def list_users(
     query = {}
     if search:
         query["$or"] = [
-            {"name": {"$regex": search, "$options": "i"}},
+            {"first_name": {"$regex": search, "$options": "i"}},
+            {"last_name": {"$regex": search, "$options": "i"}},
             {"email": {"$regex": search, "$options": "i"}}
         ]
     total = await db.users.count_documents(query)
@@ -248,15 +276,17 @@ async def create_user(req: UserCreate, user=Depends(get_current_user)):
     new_user = {
         "id": str(uuid.uuid4()),
         "email": req.email,
-        "name": req.name,
+        "first_name": req.first_name,
+        "last_name": req.last_name,
         "password_hash": pwd_context.hash(req.password),
         "role": req.role,
         "is_active": True,
         "created_at": datetime.now(timezone.utc).isoformat()
     }
     await db.users.insert_one(new_user)
-    await log_audit("user_created", user, "user", new_user["id"], new_user["email"], f"Created user {new_user['name']} ({new_user['role']})")
-    return {"id": new_user["id"], "email": new_user["email"], "name": new_user["name"], "role": new_user["role"], "is_active": True}
+    full_name = f"{req.first_name} {req.last_name}".strip()
+    await log_audit("user_created", user, "user", new_user["id"], new_user["email"], f"Created user {full_name} ({new_user['role']})")
+    return {"id": new_user["id"], "email": new_user["email"], "first_name": new_user["first_name"], "last_name": new_user["last_name"], "role": new_user["role"], "is_active": True}
 
 @api_router.put("/users/{user_id}")
 async def update_user(user_id: str, req: UserUpdate, user=Depends(get_current_user)):
@@ -367,7 +397,7 @@ async def create_deal(req: DealCreate, user=Depends(get_current_user)):
         "treasury_remarks": "",
         "settlement_proofs": [],
         "created_by": user["id"],
-        "created_by_name": user["name"],
+        "created_by_name": user_full_name(user),
         "processed_by": None,
         "processed_by_name": None,
         "processed_at": None,
@@ -406,7 +436,7 @@ async def upload_settlement_proof(deal_id: str, file: UploadFile = File(...), us
     except Exception as e:
         logger.error(f"Upload failed: {e}")
         raise HTTPException(status_code=500, detail="Upload failed")
-    proof = {"id": str(uuid.uuid4()), "path": path, "filename": file.filename, "content_type": file.content_type, "uploaded_at": datetime.now(timezone.utc).isoformat(), "uploaded_by": user["name"]}
+    proof = {"id": str(uuid.uuid4()), "path": path, "filename": file.filename, "content_type": file.content_type, "uploaded_at": datetime.now(timezone.utc).isoformat(), "uploaded_by": user_full_name(user)}
     await db.deals.update_one({"id": deal_id}, {"$push": {"settlement_proofs": proof}})
     await log_audit("proof_uploaded", user, "deal", deal_id, deal.get("reference_number", ""), f"Uploaded settlement proof: {file.filename}")
     return proof
@@ -443,7 +473,7 @@ async def process_deal(deal_id: str, req: DealProcess, user=Depends(get_current_
         "status": req.status,
         "treasury_remarks": req.treasury_remarks,
         "processed_by": user["id"],
-        "processed_by_name": user["name"],
+        "processed_by_name": user_full_name(user),
         "processed_at": datetime.now(timezone.utc).isoformat(),
         "updated_at": datetime.now(timezone.utc).isoformat()
     }
@@ -658,10 +688,18 @@ async def get_dashboard_stats(date_range: str = Query("30d", alias="range"), use
 
 # --- Seed Data ---
 async def seed_data():
+    # Migrate existing users: split name → first_name + last_name
+    async for u in db.users.find({"name": {"$exists": True}, "first_name": {"$exists": False}}, {"_id": 0, "id": 1, "name": 1}):
+        parts = (u.get("name", "")).split(" ", 1)
+        fn = parts[0] if parts else ""
+        ln = parts[1] if len(parts) > 1 else ""
+        await db.users.update_one({"id": u["id"]}, {"$set": {"first_name": fn, "last_name": ln}, "$unset": {"name": ""}})
+    logger.info("Migration: user name → first_name/last_name complete")
+
     # Default users
     if not await db.users.find_one({"role": "admin"}):
         await db.users.insert_one({
-            "id": str(uuid.uuid4()), "email": "admin@fxtracker.com", "name": "System Admin",
+            "id": str(uuid.uuid4()), "email": "admin@fxtracker.com", "first_name": "System", "last_name": "Admin",
             "password_hash": pwd_context.hash("Admin@123"), "role": "admin",
             "is_active": True, "created_at": datetime.now(timezone.utc).isoformat()
         })
@@ -669,14 +707,14 @@ async def seed_data():
 
     if not await db.users.find_one({"role": "trader"}):
         await db.users.insert_one({
-            "id": str(uuid.uuid4()), "email": "trader@fxtracker.com", "name": "John Trader",
+            "id": str(uuid.uuid4()), "email": "trader@fxtracker.com", "first_name": "John", "last_name": "Trader",
             "password_hash": pwd_context.hash("Trader@123"), "role": "trader",
             "is_active": True, "created_at": datetime.now(timezone.utc).isoformat()
         })
 
     if not await db.users.find_one({"role": "treasury"}):
         await db.users.insert_one({
-            "id": str(uuid.uuid4()), "email": "treasury@fxtracker.com", "name": "Jane Treasury",
+            "id": str(uuid.uuid4()), "email": "treasury@fxtracker.com", "first_name": "Jane", "last_name": "Treasury",
             "password_hash": pwd_context.hash("Treasury@123"), "role": "treasury",
             "is_active": True, "created_at": datetime.now(timezone.utc).isoformat()
         })

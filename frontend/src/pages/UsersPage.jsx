@@ -26,7 +26,7 @@ export default function UsersPage() {
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const [edit, setEdit] = useState(null);
-  const [form, setForm] = useState({ name: '', email: '', password: '', role: 'trader' });
+  const [form, setForm] = useState({ first_name: '', last_name: '', email: '', password: '', role: 'trader' });
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 250);
@@ -54,13 +54,13 @@ export default function UsersPage() {
     return () => c.abort();
   }, [load]);
 
-  const openNew = () => { setEdit(null); setForm({ name: '', email: '', password: '', role: 'trader' }); setOpen(true); };
-  const openEdit = useCallback((u) => { setEdit(u); setForm({ name: u.name, email: u.email, password: '', role: u.role }); setOpen(true); }, []);
+  const openNew = () => { setEdit(null); setForm({ first_name: '', last_name: '', email: '', password: '', role: 'trader' }); setOpen(true); };
+  const openEdit = useCallback((u) => { setEdit(u); setForm({ first_name: u.first_name || '', last_name: u.last_name || '', email: u.email, password: '', role: u.role }); setOpen(true); }, []);
 
   const save = async () => {
     try {
       if (edit) {
-        const payload = { name: form.name, email: form.email, role: form.role };
+        const payload = { first_name: form.first_name, last_name: form.last_name, email: form.email, role: form.role };
         if (form.password) payload.password = form.password;
         await api.put(`/users/${edit.id}`, payload);
         toast.success('User updated');
@@ -145,9 +145,15 @@ export default function UsersPage() {
             <DialogTitle style={{ fontFamily: 'Chivo' }}>{edit ? 'Edit' : 'Add'} User</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
-            <div className="space-y-1.5">
-              <Label className="text-xs">Name</Label>
-              <Input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} data-testid="user-name-input" />
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs">First Name</Label>
+                <Input value={form.first_name} onChange={e => setForm({ ...form, first_name: e.target.value })} data-testid="user-first-name-input" />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Last Name</Label>
+                <Input value={form.last_name} onChange={e => setForm({ ...form, last_name: e.target.value })} data-testid="user-last-name-input" />
+              </div>
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Email</Label>
@@ -183,7 +189,7 @@ export default function UsersPage() {
 const UserRow = memo(function UserRow({ user, onEdit, onDelete }) {
   return (
     <TableRow data-testid={`user-row-${user.id}`}>
-      <TableCell className="font-medium text-sm">{user.name}</TableCell>
+      <TableCell className="font-medium text-sm">{`${user.first_name || ''} ${user.last_name || ''}`.trim() || user.name}</TableCell>
       <TableCell className="text-sm text-slate-500">{user.email}</TableCell>
       <TableCell>
         <Badge className={ROLE_BADGE[user.role]}>{user.role === 'treasury' ? 'Treasury Ops' : user.role}</Badge>
