@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { lazy, Suspense } from 'react';
 import { Toaster } from 'sonner';
 import { AuthProvider, useAuth } from '@/lib/auth';
+import { RefDataProvider } from '@/lib/refdata';
 import Layout from '@/components/Layout';
 import LoginPage from '@/pages/LoginPage';
 
@@ -58,8 +59,10 @@ function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <AppRoutes />
-        <Toaster position="top-right" theme="light" richColors />
+        <RefDataProvider>
+          <AppRoutes />
+          <Toaster position="top-right" theme="light" richColors />
+        </RefDataProvider>
       </AuthProvider>
     </BrowserRouter>
   );

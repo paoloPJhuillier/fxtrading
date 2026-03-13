@@ -1,6 +1,7 @@
-import { useState, useEffect, useCallback, useMemo, memo, useRef } from 'react';
+import { useState, useCallback, useMemo, memo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '@/lib/api';
+import { useRefData } from '@/lib/refdata';
 import { cn } from '@/lib/utils';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -24,7 +25,8 @@ export default function NewDealPage() {
   const [errors, setErrors] = useState({});
   const [proofFiles, setProofFiles] = useState([]);
   const proofRef = useRef(null);
-  const [ref, setRef] = useState({ companies: [], banks: [], txTypes: [], tfTypes: [], currencies: [] });
+  const { data: ref } = useRefData();
+  const safeRef = ref || { companies: [], banks: [], txTypes: [], tfTypes: [], currencies: [] };
   const [f, setF] = useState({
     transaction_type: '', transfer_type: '', client_name: '',
     deal_date: new Date(), value_date: new Date(),
@@ -34,20 +36,6 @@ export default function NewDealPage() {
     buy_currency: '', sell_currency: '',
     currency_amount: '', amount: '', rate: '', remarks: ''
   });
-
-  useEffect(() => {
-    Promise.all([
-      api.get('/reference/companies'), api.get('/reference/banks'),
-      api.get('/reference/transaction-types'), api.get('/reference/transfer-types'),
-      api.get('/reference/currencies'),
-    ]).then(([c, b, tx, tf, cur]) => {
-      setRef({
-        companies: c.data.filter(i => i.is_active), banks: b.data.filter(i => i.is_active),
-        txTypes: tx.data.filter(i => i.is_active), tfTypes: tf.data.filter(i => i.is_active),
-        currencies: cur.data.filter(i => i.is_active),
-      });
-    }).catch(console.error);
-  }, []);
 
   // Stable handler — uses only functional updaters, no external deps
   const up = useCallback((k, v) => {
@@ -70,9 +58,9 @@ export default function NewDealPage() {
   const onInput = useCallback(e => up(e.target.name, e.target.value), [up]);
 
   // Memoized derived arrays — stable refs unless currencies change
-  const fiat = useMemo(() => ref.currencies.filter(c => c.type === 'fiat'), [ref.currencies]);
-  const stablecoin = useMemo(() => ref.currencies.filter(c => c.type === 'stablecoin'), [ref.currencies]);
-  const crypto = useMemo(() => ref.currencies.filter(c => c.type === 'crypto'), [ref.currencies]);
+  const fiat = useMemo(() => safeRef.currencies.filter(c => c.type === 'fiat'), [safeRef.currencies]);
+  const stablecoin = useMemo(() => safeRef.currencies.filter(c => c.type === 'stablecoin'), [safeRef.currencies]);
+  const crypto = useMemo(() => safeRef.currencies.filter(c => c.type === 'crypto'), [safeRef.currencies]);
 
   const validate = () => {
     const errs = {};
@@ -161,13 +149,13 @@ export default function NewDealPage() {
                 <VField label="Transaction Type" error={errors.transaction_type}>
                   <Select value={f.transaction_type} onValueChange={v => up('transaction_type', v)}>
                     <SelectTrigger data-testid="transaction-type-select" className={errors.transaction_type ? 'border-red-400' : ''}><SelectValue placeholder="Select..." /></SelectTrigger>
-                    <SelectContent>{ref.txTypes.map(t => <SelectItem key={t.id} value={t.name}>{t.name}</SelectItem>)}</SelectContent>
+                    <SelectContent>{safeRef.txTypes.map(t => <SelectItem key={t.id} value={t.name}>{t.name}</SelectItem>)}</SelectContent>
                   </Select>
                 </VField>
                 <VField label="Transfer Type" error={errors.transfer_type}>
                   <Select value={f.transfer_type} onValueChange={v => up('transfer_type', v)}>
                     <SelectTrigger data-testid="transfer-type-select" className={errors.transfer_type ? 'border-red-400' : ''}><SelectValue placeholder="Select..." /></SelectTrigger>
-                    <SelectContent>{ref.tfTypes.map(t => <SelectItem key={t.id} value={t.name}>{t.name}</SelectItem>)}</SelectContent>
+                    <SelectContent>{safeRef.tfTypes.map(t => <SelectItem key={t.id} value={t.name}>{t.name}</SelectItem>)}</SelectContent>
                   </Select>
                 </VField>
               </div>
@@ -212,10 +200,10 @@ export default function NewDealPage() {
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
-              <SearchSelect label="Company" value={f.from_company} name="from_company" onChange={up} items={ref.companies} displayKey="name" tid="from-company" placeholder="Search company..." error={errors.from_company} />
+              <SearchSelect label="Company" value={f.from_company} name="from_company" onChange={up} items={safeRef.companies} displayKey="name" tid="from-company" placeholder="Search company..." error={errors.from_company} />
               {f.from_type === 'bank' ? (
                 <>
-                  <SearchSelect label="Bank" value={f.from_bank} name="from_bank" onChange={up} items={ref.banks} displayKey="name" tid="from-bank" placeholder="Search bank..." error={errors.from_bank} />
+                  <SearchSelect label="Bank" value={f.from_bank} name="from_bank" onChange={up} items={safeRef.banks} displayKey="name" tid="from-bank" placeholder="Search bank..." error={errors.from_bank} />
                   <VField label="Account Number" error={errors.from_account_num}>
                     <Input name="from_account_num" value={f.from_account_num} onChange={onInput} placeholder="Enter account number" data-testid="from-account-input" className={errors.from_account_num ? 'border-red-400' : ''} />
                   </VField>
@@ -236,10 +224,10 @@ export default function NewDealPage() {
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
-              <SearchSelect label="Company" value={f.to_company} name="to_company" onChange={up} items={ref.companies} displayKey="name" tid="to-company" placeholder="Search company..." error={errors.to_company} />
+              <SearchSelect label="Company" value={f.to_company} name="to_company" onChange={up} items={safeRef.companies} displayKey="name" tid="to-company" placeholder="Search company..." error={errors.to_company} />
               {f.to_type === 'bank' ? (
                 <>
-                  <SearchSelect label="Bank" value={f.to_bank} name="to_bank" onChange={up} items={ref.banks} displayKey="name" tid="to-bank" placeholder="Search bank..." error={errors.to_bank} />
+                  <SearchSelect label="Bank" value={f.to_bank} name="to_bank" onChange={up} items={safeRef.banks} displayKey="name" tid="to-bank" placeholder="Search bank..." error={errors.to_bank} />
                   <VField label="Account Number" error={errors.to_account_num}>
                     <Input name="to_account_num" value={f.to_account_num} onChange={onInput} placeholder="Enter account number" data-testid="to-account-input" className={errors.to_account_num ? 'border-red-400' : ''} />
                   </VField>
@@ -267,7 +255,7 @@ export default function NewDealPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {f.ours_type === 'bank' ? (
                 <>
-                  <SearchSelect label="Bank" value={f.ours_bank} name="ours_bank" onChange={up} items={ref.banks} displayKey="name" tid="ours-bank" placeholder="Search bank..." error={errors.ours_bank} />
+                  <SearchSelect label="Bank" value={f.ours_bank} name="ours_bank" onChange={up} items={safeRef.banks} displayKey="name" tid="ours-bank" placeholder="Search bank..." error={errors.ours_bank} />
                   <VField label="Account Number" error={errors.ours_account_num}>
                     <Input name="ours_account_num" value={f.ours_account_num} onChange={onInput} placeholder="Enter account number" data-testid="ours-account-input" className={errors.ours_account_num ? 'border-red-400' : ''} />
                   </VField>

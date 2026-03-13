@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef, memo } from 'react';
 import api from '@/lib/api';
+import { useRefData } from '@/lib/refdata';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -45,6 +46,8 @@ export default function ReferenceDataPage() {
     setOpen(true);
   }, []);
 
+  const { reload: reloadRefData } = useRefData();
+
   const save = async () => {
     try {
       if (edit) {
@@ -54,15 +57,15 @@ export default function ReferenceDataPage() {
         await api.post(`/reference/${tab}`, form);
         toast.success('Created');
       }
-      setOpen(false); load();
+      setOpen(false); load(); reloadRefData();
     } catch (e) { toast.error(e.response?.data?.detail || 'Save failed'); }
   };
 
   const del = useCallback(async (id) => {
     if (!window.confirm('Delete this item?')) return;
-    try { await api.delete(`/reference/${tab}/${id}`); toast.success('Deleted'); load(); }
+    try { await api.delete(`/reference/${tab}/${id}`); toast.success('Deleted'); load(); reloadRefData(); }
     catch (e) { toast.error('Delete failed'); }
-  }, [tab, load]);
+  }, [tab, load, reloadRefData]);
 
   const isBank = tab === 'banks';
   const isCurr = tab === 'currencies';
