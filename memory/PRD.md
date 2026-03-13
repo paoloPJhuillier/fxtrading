@@ -57,9 +57,10 @@ Mobile-responsive full-stack FX Trading Tracker platform with:
 - [x] **Proof of Payment Upload at Deal Creation (Mar 2026):** Trader can select and upload settlement proof files during deal creation. Files uploaded after deal is created via POST /deals/{id}/upload.
 - [x] **Global RefData Cache (Mar 2026):** Created RefDataContext to fetch reference data once on login and cache globally. NewDealPage loads instantly (106ms on repeat visit) with pre-populated dropdowns — eliminated 5 API calls per visit. ReferenceDataPage mutations invalidate the cache via reload().
 - [x] **Instant Deal Dialog (Mar 2026):** Eliminated redundant API call when viewing deal detail on My Deals page — dialog now opens in 78ms using data already in table row.
+- [x] **Dashboard Stats Caching (Mar 2026):** Module-level cache (`statsCache`, `cachedRange`) persists across unmount/remount. Return navigation to Dashboard renders in ~128ms with zero skeleton/loading states. Cache invalidates automatically on date range change. Verified for all 3 roles.
 
 ## P0/P1/P2 Backlog
-- No pending issues or feature requests
+- No pending issues or feature requests. All performance optimizations complete.
 
 ## Key Files
 - `backend/server.py` - All API endpoints
