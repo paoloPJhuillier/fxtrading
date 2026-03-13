@@ -49,6 +49,10 @@ Mobile-responsive full-stack FX Trading Tracker platform with:
   - useMemo for derived currency arrays (fiat, stablecoin, crypto)
   - Name-based onChange pattern: onChange(name, value) for all memo'd components
 - [x] **ReferenceDataPage Optimization (Mar 2026):** RefRow memo, useCallback for openEdit/del, smooth loading pattern
+- [x] **StrictMode & CSS Performance Fix (Mar 2026):**
+  - Removed React.StrictMode (was doubling all renders, effects, and API calls)
+  - Replaced `transition-all` with `transition-colors` on interactive elements (prevents layout thrashing)
+  - Fixed tabs.jsx, Layout.jsx nav links, TypeToggle buttons
 
 ## P0/P1/P2 Backlog
 - No pending issues or feature requests

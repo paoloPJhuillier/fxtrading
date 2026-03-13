@@ -1,14 +1,3 @@
-/* FX Trading Tracker - Custom Styles */
-
-.spinner {
-    animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-    from { transform: rotate(0deg); }
-    to { transform: rotate(360deg); }
-}
-
 /* Scrollbar styling */
 ::-webkit-scrollbar {
     width: 6px;
@@ -28,15 +17,6 @@
     background: #94a3b8;
 }
 
-/* Table numeric alignment */
 .tabular-nums {
     font-variant-numeric: tabular-nums;
-}
-
-/* Push Emergent badge behind dialogs */
-#emergent-badge {
-    display: none !important;
-    visibility: hidden !important;
-    opacity: 0 !important;
-    pointer-events: none !important;
 }

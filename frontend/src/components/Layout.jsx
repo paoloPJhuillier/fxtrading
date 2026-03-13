@@ -48,7 +48,7 @@ const SidebarContent = memo(function SidebarContent({ items, user, onLogout, onN
             onClick={onNavClick}
             data-testid={`nav-${item.label.toLowerCase().replace(/\s/g, '-')}`}
             className={({ isActive }) =>
-              `flex items-center gap-3 px-4 py-2.5 rounded-md text-sm transition-all duration-150 ${
+              `flex items-center gap-3 px-4 py-2.5 rounded-md text-sm transition-colors duration-150 ${
                 isActive
                   ? 'bg-[#518dca] text-white font-medium shadow-sm'
                   : 'text-white/60 hover:bg-white/8 hover:text-white'

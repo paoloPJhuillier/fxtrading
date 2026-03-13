@@ -347,11 +347,11 @@ const TypeToggle = memo(function TypeToggle({ value, name, onChange, testId }) {
   return (
     <div className="flex gap-1 p-0.5 bg-slate-100 rounded-md w-fit">
       <button type="button" onClick={() => onChange(name, 'bank')} data-testid={`${testId}-bank`}
-        className={`px-3 py-1 text-xs font-medium rounded transition-all ${value === 'bank' ? 'bg-[#08263e] text-white shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+        className={`px-3 py-1 text-xs font-medium rounded transition-colors ${value === 'bank' ? 'bg-[#08263e] text-white shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
         Bank
       </button>
       <button type="button" onClick={() => onChange(name, 'crypto')} data-testid={`${testId}-crypto`}
-        className={`px-3 py-1 text-xs font-medium rounded transition-all ${value === 'crypto' ? 'bg-[#08263e] text-white shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+        className={`px-3 py-1 text-xs font-medium rounded transition-colors ${value === 'crypto' ? 'bg-[#08263e] text-white shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
         Crypto
       </button>
     </div>
