@@ -29,6 +29,7 @@ const PIE_COLORS = ['#f59e0b', '#10b981', '#ec474e'];
 
 // Module-level cache persists across unmount/remount
 let statsCache = null;
+let cachedRange = '30d';
 
 function formatVol(v) {
   if (v >= 1e6) return `${(v / 1e6).toFixed(1)}M`;
@@ -39,20 +40,25 @@ function formatVol(v) {
 export default function DashboardPage() {
   const { user } = useAuth();
   const [stats, setStats] = useState(statsCache);
-  const [range, setRange] = useState('30d');
+  const [range, setRange] = useState(cachedRange);
   const [loading, setLoading] = useState(!statsCache);
 
-  const fetchStats = useCallback(async () => {
-    if (!stats && !statsCache) setLoading(true);
+  const fetchStats = useCallback(async (isRangeChange) => {
+    if (!statsCache) setLoading(true);
     try {
       const res = await api.get(`/dashboard/stats?range=${range}`);
       setStats(res.data);
       statsCache = res.data;
+      cachedRange = range;
     } catch (err) { console.error(err); }
     finally { setLoading(false); }
   }, [range]);
 
-  useEffect(() => { fetchStats(); }, [fetchStats]);
+  useEffect(() => {
+    // Skip fetch if we already have cached data for this range
+    if (statsCache && range === cachedRange) return;
+    fetchStats();
+  }, [fetchStats, range]);
 
   const pieData = stats ? [
     { name: 'Pending', value: stats.pending_deals },
