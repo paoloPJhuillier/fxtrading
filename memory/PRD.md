@@ -53,6 +53,8 @@ Mobile-responsive full-stack FX Trading Tracker platform with:
   - Removed React.StrictMode (was doubling all renders, effects, and API calls)
   - Replaced `transition-all` with `transition-colors` on interactive elements (prevents layout thrashing)
   - Fixed tabs.jsx, Layout.jsx nav links, TypeToggle buttons
+- [x] **Loading Flash Fix (Mar 2026):** Applied hasLoaded ref pattern across all 6 data pages — loading spinner only shows on initial load, subsequent fetches (filter/pagination/tab) update silently. Debounce reduced from 400ms to 250ms.
+- [x] **Proof of Payment Upload at Deal Creation (Mar 2026):** Trader can select and upload settlement proof files during deal creation. Files uploaded after deal is created via POST /deals/{id}/upload.
 
 ## P0/P1/P2 Backlog
 - No pending issues or feature requests
