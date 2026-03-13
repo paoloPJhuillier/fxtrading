@@ -42,6 +42,13 @@ Mobile-responsive full-stack FX Trading Tracker platform with:
   - Layout: SidebarContent extracted as memo'd component
   - Dashboard table: RecentDealRow memo'd
   - Eliminated MutationObserver on document.body (was firing on every DOM mutation from dialog/toast portals). Replaced with CSS-only badge hiding.
+- [x] **NewDealPage Performance Rewrite (Mar 2026):**
+  - Moved TypeToggle outside component (was causing unmount/remount 3x per keystroke)
+  - All sub-components memo'd: TypeToggle, SearchSelect, CurrSel, DatePick, CurrItem
+  - Stable callbacks: up() with useCallback + functional updaters, single onInput using e.target.name
+  - useMemo for derived currency arrays (fiat, stablecoin, crypto)
+  - Name-based onChange pattern: onChange(name, value) for all memo'd components
+- [x] **ReferenceDataPage Optimization (Mar 2026):** RefRow memo, useCallback for openEdit/del, smooth loading pattern
 
 ## P0/P1/P2 Backlog
 - No pending issues or feature requests
