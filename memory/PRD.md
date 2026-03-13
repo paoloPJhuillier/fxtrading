@@ -41,6 +41,7 @@ Mobile-responsive full-stack FX Trading Tracker platform with:
   - Backend: Dashboard uses MongoDB $facet aggregation (no longer loads all docs into memory)
   - Layout: SidebarContent extracted as memo'd component
   - Dashboard table: RecentDealRow memo'd
+  - Eliminated MutationObserver on document.body (was firing on every DOM mutation from dialog/toast portals). Replaced with CSS-only badge hiding.
 
 ## P0/P1/P2 Backlog
 - No pending issues or feature requests

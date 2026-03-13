@@ -1,5 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { lazy, Suspense, useEffect } from 'react';
+import { lazy, Suspense } from 'react';
 import { Toaster } from 'sonner';
 import { AuthProvider, useAuth } from '@/lib/auth';
 import Layout from '@/components/Layout';
@@ -55,22 +55,6 @@ function AppRoutes() {
 }
 
 function App() {
-  useEffect(() => {
-    const hide = () => {
-      const el = document.getElementById('emergent-badge');
-      if (el) { el.remove(); return true; }
-      return false;
-    };
-    if (hide()) return;
-    const t1 = setTimeout(hide, 500);
-    const t2 = setTimeout(hide, 2000);
-    const obs = new MutationObserver(() => {
-      if (hide()) obs.disconnect();
-    });
-    obs.observe(document.body, { childList: true });
-    return () => { clearTimeout(t1); clearTimeout(t2); obs.disconnect(); };
-  }, []);
-
   return (
     <BrowserRouter>
       <AuthProvider>
