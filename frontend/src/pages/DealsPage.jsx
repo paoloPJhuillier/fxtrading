@@ -15,7 +15,7 @@ import { Plus, FileText, Eye, Filter, X, Ban, Image as ImageIcon, Download, Uplo
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || '';
+const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const SB = {
   pending: 'bg-yellow-100 text-yellow-800',
   confirmed: 'bg-green-100 text-green-800',

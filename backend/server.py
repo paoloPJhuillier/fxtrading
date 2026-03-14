@@ -41,7 +41,7 @@ logger = logging.getLogger(__name__)
 # --- Object Storage ---
 STORAGE_URL = "https://integrations.emergentagent.com/objstore/api/v1/storage"
 EMERGENT_KEY = os.environ.get("EMERGENT_LLM_KEY")
-APP_NAME = "fx-trading-tracker"
+APP_NAME = os.environ.get("APP_NAME", "fx-trading-tracker")
 storage_key = None
 
 def init_storage():
@@ -176,6 +176,11 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
         user = await db.users.find_one({"id": user_id}, {"_id": 0, "password_hash": 0})
         if not user:
             raise HTTPException(status_code=401, detail="User not found")
+        # Ensure first_name/last_name exist (backward compat with legacy 'name' field)
+        if "first_name" not in user:
+            parts = (user.get("name", "")).split(" ", 1)
+            user["first_name"] = parts[0] if parts else ""
+            user["last_name"] = parts[1] if len(parts) > 1 else ""
         return user
     except JWTError:
         raise HTTPException(status_code=401, detail="Invalid token")
@@ -232,7 +237,7 @@ async def login(req: LoginRequest):
 
 @api_router.get("/auth/me")
 async def get_me(user=Depends(get_current_user)):
-    return user
+    return {"id": user.get("id"), "email": user.get("email"), "first_name": user.get("first_name", ""), "last_name": user.get("last_name", ""), "role": user.get("role")}
 
 @api_router.put("/auth/change-password")
 async def change_password(req: ChangePasswordRequest, user=Depends(get_current_user)):
