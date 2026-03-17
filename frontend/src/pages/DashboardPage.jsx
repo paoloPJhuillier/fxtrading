@@ -13,8 +13,10 @@ import { TrendingUp, Clock, CheckCircle, XCircle, Users, DollarSign } from 'luci
 import { format } from 'date-fns';
 
 const RANGES = [
-  { value: '7d', label: 'Last 7 Days' },
-  { value: '30d', label: 'Last 30 Days' },
+  { value: 'today', label: 'Today' },
+  { value: 'yesterday', label: 'Yesterday' },
+  { value: '7d', label: '7D' },
+  { value: '30d', label: '30D' },
   { value: 'ytd', label: 'YTD' },
   { value: 'all', label: 'All Time' },
 ];

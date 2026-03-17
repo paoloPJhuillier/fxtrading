@@ -146,6 +146,42 @@ class ReferenceItemUpdate(BaseModel):
     symbol: Optional[str] = None
     is_active: Optional[bool] = None
 
+class BankAccountCreate(BaseModel):
+    account_number: str
+    account_name: Optional[str] = ""
+
+class BankAccountUpdate(BaseModel):
+    account_number: Optional[str] = None
+    account_name: Optional[str] = None
+    is_active: Optional[bool] = None
+
+class DealEdit(BaseModel):
+    transaction_type: Optional[str] = None
+    value_date: Optional[str] = None
+    deal_date: Optional[str] = None
+    transfer_type: Optional[str] = None
+    client_name: Optional[str] = None
+    from_type: Optional[str] = None
+    from_company: Optional[str] = None
+    from_bank: Optional[str] = None
+    from_account_num: Optional[str] = None
+    from_wallet_address: Optional[str] = None
+    to_type: Optional[str] = None
+    to_company: Optional[str] = None
+    to_bank: Optional[str] = None
+    to_account_num: Optional[str] = None
+    to_wallet_address: Optional[str] = None
+    ours_type: Optional[str] = None
+    ours_bank: Optional[str] = None
+    ours_account_num: Optional[str] = None
+    ours_wallet_address: Optional[str] = None
+    buy_currency: Optional[str] = None
+    sell_currency: Optional[str] = None
+    currency_amount: Optional[float] = None
+    amount: Optional[float] = None
+    rate: Optional[float] = None
+    remarks: Optional[str] = None
+
 
 # --- Auth Helpers ---
 def user_full_name(user: dict) -> str:
@@ -217,6 +253,29 @@ async def log_audit(action: str, user: dict, entity_type: str, entity_id: str, e
         "created_at": datetime.now(timezone.utc).isoformat()
     }
     await db.audit_logs.insert_one(entry)
+
+async def record_deal_history(deal_id: str, action: str, user: dict, changes: list = None, remarks: str = ""):
+    entry = {
+        "id": str(uuid.uuid4()),
+        "action": action,
+        "user_name": user_full_name(user),
+        "user_role": user["role"],
+        "changes": changes or [],
+        "remarks": remarks,
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    }
+    await db.deals.update_one({"id": deal_id}, {"$push": {"history": entry}})
+
+def compute_changes(old_deal: dict, new_fields: dict) -> list:
+    changes = []
+    skip = {"_id", "id", "history", "settlement_proofs", "updated_at", "created_at"}
+    for k, v in new_fields.items():
+        if k in skip:
+            continue
+        old_val = old_deal.get(k)
+        if old_val != v and v is not None:
+            changes.append({"field": k, "old_value": str(old_val) if old_val is not None else "", "new_value": str(v)})
+    return changes
 
 
 # --- Auth Endpoints ---
@@ -401,6 +460,7 @@ async def create_deal(req: DealCreate, user=Depends(get_current_user)):
         "status": "pending",
         "treasury_remarks": "",
         "settlement_proofs": [],
+        "history": [],
         "created_by": user["id"],
         "created_by_name": user_full_name(user),
         "processed_by": None,
@@ -411,6 +471,7 @@ async def create_deal(req: DealCreate, user=Depends(get_current_user)):
     }
     await db.deals.insert_one(deal)
     deal.pop("_id", None)
+    await record_deal_history(deal["id"], "created", user, remarks=f"Deal ticket created — {req.buy_currency}/{req.sell_currency} {req.currency_amount}")
     await log_audit("deal_created", user, "deal", deal["id"], ref, f"Created deal {ref} for {req.client_name} — {req.buy_currency}/{req.sell_currency} {req.currency_amount}")
     return deal
 
@@ -424,13 +485,13 @@ async def get_deal(deal_id: str, user=Depends(get_current_user)):
     return deal
 
 @api_router.post("/deals/{deal_id}/upload")
-async def upload_settlement_proof(deal_id: str, file: UploadFile = File(...), user=Depends(get_current_user)):
+async def upload_settlement_proof(deal_id: str, file: UploadFile = File(...), proof_type: str = Query("client", regex="^(client|processor)$"), user=Depends(get_current_user)):
     deal = await db.deals.find_one({"id": deal_id}, {"_id": 0})
     if not deal:
         raise HTTPException(status_code=404, detail="Deal not found")
-    allowed = ["image/jpeg", "image/png", "image/webp", "image/gif"]
+    allowed = ["image/jpeg", "image/png", "image/webp", "image/gif", "application/pdf"]
     if file.content_type not in allowed:
-        raise HTTPException(status_code=400, detail="Only image files (JPEG, PNG, WebP, GIF) are allowed")
+        raise HTTPException(status_code=400, detail="Only image files (JPEG, PNG, WebP, GIF) and PDF are allowed")
     data = await file.read()
     if len(data) > 10 * 1024 * 1024:
         raise HTTPException(status_code=400, detail="File too large (max 10MB)")
@@ -441,9 +502,10 @@ async def upload_settlement_proof(deal_id: str, file: UploadFile = File(...), us
     except Exception as e:
         logger.error(f"Upload failed: {e}")
         raise HTTPException(status_code=500, detail="Upload failed")
-    proof = {"id": str(uuid.uuid4()), "path": path, "filename": file.filename, "content_type": file.content_type, "uploaded_at": datetime.now(timezone.utc).isoformat(), "uploaded_by": user_full_name(user)}
+    proof = {"id": str(uuid.uuid4()), "path": path, "filename": file.filename, "content_type": file.content_type, "proof_type": proof_type, "uploaded_at": datetime.now(timezone.utc).isoformat(), "uploaded_by": user_full_name(user)}
     await db.deals.update_one({"id": deal_id}, {"$push": {"settlement_proofs": proof}})
-    await log_audit("proof_uploaded", user, "deal", deal_id, deal.get("reference_number", ""), f"Uploaded settlement proof: {file.filename}")
+    await record_deal_history(deal_id, "proof_uploaded", user, remarks=f"Uploaded {proof_type} settlement proof: {file.filename}")
+    await log_audit("proof_uploaded", user, "deal", deal_id, deal.get("reference_number", ""), f"Uploaded {proof_type} settlement proof: {file.filename}")
     return proof
 
 @api_router.get("/files/{path:path}")
@@ -483,6 +545,8 @@ async def process_deal(deal_id: str, req: DealProcess, user=Depends(get_current_
         "updated_at": datetime.now(timezone.utc).isoformat()
     }
     await db.deals.update_one({"id": deal_id}, {"$set": update})
+    changes = [{"field": "status", "old_value": "pending", "new_value": req.status}]
+    await record_deal_history(deal_id, f"deal_{req.status}", user, changes, req.treasury_remarks)
     updated = await db.deals.find_one({"id": deal_id}, {"_id": 0})
     await log_audit(f"deal_{req.status}", user, "deal", deal_id, deal.get("reference_number", ""), f"Deal {req.status} — {req.treasury_remarks}")
     return updated
@@ -506,6 +570,8 @@ async def cancel_deal(deal_id: str, req: DealCancel, user=Depends(get_current_us
         "updated_at": datetime.now(timezone.utc).isoformat()
     }
     await db.deals.update_one({"id": deal_id}, {"$set": update})
+    changes = [{"field": "status", "old_value": "pending", "new_value": "cancelled"}]
+    await record_deal_history(deal_id, "deal_cancelled", user, changes, req.cancellation_reason)
     updated = await db.deals.find_one({"id": deal_id}, {"_id": 0})
     await log_audit("deal_cancelled", user, "deal", deal_id, deal.get("reference_number", ""), f"Deal cancelled — {req.cancellation_reason}")
     return updated
@@ -529,8 +595,33 @@ async def resubmit_deal(deal_id: str, user=Depends(get_current_user)):
         "updated_at": datetime.now(timezone.utc).isoformat()
     }
     await db.deals.update_one({"id": deal_id}, {"$set": update})
+    changes = [{"field": "status", "old_value": "returned", "new_value": "pending"}]
+    await record_deal_history(deal_id, "deal_resubmitted", user, changes, "Deal resubmitted after return")
     updated = await db.deals.find_one({"id": deal_id}, {"_id": 0})
     await log_audit("deal_resubmitted", user, "deal", deal_id, deal.get("reference_number", ""), f"Deal resubmitted after return")
+    return updated
+
+@api_router.put("/deals/{deal_id}/edit")
+async def edit_deal(deal_id: str, req: DealEdit, user=Depends(get_current_user)):
+    await require_role(user, ["trader"])
+    deal = await db.deals.find_one({"id": deal_id}, {"_id": 0})
+    if not deal:
+        raise HTTPException(status_code=404, detail="Deal not found")
+    if deal["created_by"] != user["id"]:
+        raise HTTPException(status_code=403, detail="You can only edit your own deals")
+    if deal["status"] != "returned":
+        raise HTTPException(status_code=400, detail="Only returned deals can be edited")
+    update_data = {k: v for k, v in req.model_dump().items() if v is not None}
+    if not update_data:
+        raise HTTPException(status_code=400, detail="No fields to update")
+    changes = compute_changes(deal, update_data)
+    update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
+    await db.deals.update_one({"id": deal_id}, {"$set": update_data})
+    if changes:
+        change_summary = ", ".join([f"{c['field']}: {c['old_value']} → {c['new_value']}" for c in changes[:5]])
+        await record_deal_history(deal_id, "deal_edited", user, changes, f"Fields updated: {change_summary}")
+        await log_audit("deal_edited", user, "deal", deal_id, deal.get("reference_number", ""), f"Deal edited — {change_summary}")
+    updated = await db.deals.find_one({"id": deal_id}, {"_id": 0})
     return updated
 
 
@@ -594,6 +685,48 @@ async def delete_reference(entity_type: str, item_id: str, user=Depends(get_curr
         raise HTTPException(status_code=404, detail="Item not found")
     return {"message": "Item deleted"}
 
+# --- Bank Accounts ---
+@api_router.get("/reference/banks/{bank_id}/accounts")
+async def list_bank_accounts(bank_id: str, user=Depends(get_current_user)):
+    accounts = await db.bank_accounts.find({"bank_id": bank_id}, {"_id": 0}).to_list(500)
+    return accounts
+
+@api_router.post("/reference/banks/{bank_id}/accounts")
+async def create_bank_account(bank_id: str, req: BankAccountCreate, user=Depends(get_current_user)):
+    bank = await db.banks.find_one({"id": bank_id}, {"_id": 0})
+    if not bank:
+        raise HTTPException(status_code=404, detail="Bank not found")
+    account = {
+        "id": str(uuid.uuid4()),
+        "bank_id": bank_id,
+        "account_number": req.account_number,
+        "account_name": req.account_name or "",
+        "is_active": True,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.bank_accounts.insert_one(account)
+    account.pop("_id", None)
+    await log_audit("bank_account_created", user, "bank_account", account["id"], req.account_number, f"Added account {req.account_number} to bank {bank['name']}")
+    return account
+
+@api_router.put("/reference/banks/{bank_id}/accounts/{account_id}")
+async def update_bank_account(bank_id: str, account_id: str, req: BankAccountUpdate, user=Depends(get_current_user)):
+    await require_role(user, ["admin"])
+    update_data = {k: v for k, v in req.model_dump().items() if v is not None}
+    if not update_data:
+        raise HTTPException(status_code=400, detail="No fields to update")
+    await db.bank_accounts.update_one({"id": account_id, "bank_id": bank_id}, {"$set": update_data})
+    updated = await db.bank_accounts.find_one({"id": account_id}, {"_id": 0})
+    return updated
+
+@api_router.delete("/reference/banks/{bank_id}/accounts/{account_id}")
+async def delete_bank_account(bank_id: str, account_id: str, user=Depends(get_current_user)):
+    await require_role(user, ["admin"])
+    result = await db.bank_accounts.delete_one({"id": account_id, "bank_id": bank_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Account not found")
+    return {"message": "Account deleted"}
+
 
 # --- Audit Logs ---
 @api_router.get("/audit-logs")
@@ -630,7 +763,12 @@ async def list_audit_logs(
 async def get_dashboard_stats(date_range: str = Query("30d", alias="range"), user=Depends(get_current_user)):
     now = datetime.now(timezone.utc)
     start_date = None
-    if date_range == "7d":
+    if date_range == "today":
+        start_date = now.replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
+    elif date_range == "yesterday":
+        start_date = (now - timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
+        end_date = now.replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
+    elif date_range == "7d":
         start_date = (now - timedelta(days=7)).isoformat()
     elif date_range == "30d":
         start_date = (now - timedelta(days=30)).isoformat()
@@ -640,6 +778,8 @@ async def get_dashboard_stats(date_range: str = Query("30d", alias="range"), use
     match = {}
     if start_date:
         match["created_at"] = {"$gte": start_date}
+    if date_range == "yesterday":
+        match.setdefault("created_at", {})["$lt"] = end_date
     if user["role"] == "trader":
         match["created_by"] = user["id"]
 
