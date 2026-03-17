@@ -81,6 +81,14 @@ Build an FX Trading Tracker platform with secure role-based login, deal ticket m
 - Bank Name column, From/To Bank filters
 - Column visibility toggle
 
+### Returned Deal Edit (Complete - Mar 17, 2026)
+- Edit button on returned deal detail dialog
+- Full inline editing of all deal fields (client, currencies, amounts, banks, accounts, remarks)
+- Auto-recalculation of converted amount when rate/amount changes
+- Save Changes calls PUT /api/deals/{id}/edit with only changed fields
+- Changes tracked in deal history with field-level diff
+- Flow: View → Edit → Save → Resubmit
+
 ---
 
 ## Backlog / Future Tasks
