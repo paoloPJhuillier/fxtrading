@@ -10,7 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Plus, Pencil, Trash2 } from 'lucide-react';
+import { Plus, Pencil, Trash2, CreditCard } from 'lucide-react';
 import { toast } from 'sonner';
 
 const TABS = [
@@ -28,6 +28,14 @@ export default function ReferenceDataPage() {
   const [open, setOpen] = useState(false);
   const [edit, setEdit] = useState(null);
   const [form, setForm] = useState({ name: '', code: '', swift_code: '', type: 'fiat', symbol: '' });
+
+  // Bank Accounts Dialog state
+  const [acctDialogOpen, setAcctDialogOpen] = useState(false);
+  const [acctBank, setAcctBank] = useState(null);
+  const [bankAccounts, setBankAccounts] = useState([]);
+  const [acctLoading, setAcctLoading] = useState(false);
+  const [acctForm, setAcctForm] = useState({ account_number: '', account_name: '' });
+  const [acctEdit, setAcctEdit] = useState(null);
 
   const hasLoaded = useRef(false);
   const load = useCallback(async (signal) => {
@@ -77,6 +85,51 @@ export default function ReferenceDataPage() {
   const isBank = tab === 'banks';
   const isCurr = tab === 'currencies';
 
+  const openAccounts = useCallback(async (bank) => {
+    setAcctBank(bank);
+    setAcctDialogOpen(true);
+    setAcctLoading(true);
+    setBankAccounts([]);
+    setAcctEdit(null);
+    setAcctForm({ account_number: '', account_name: '' });
+    try {
+      const r = await api.get(`/reference/banks/${bank.id}/accounts`);
+      setBankAccounts(r.data);
+    } catch (e) { toast.error('Failed to load accounts'); }
+    finally { setAcctLoading(false); }
+  }, []);
+
+  const saveAccount = async () => {
+    if (!acctForm.account_number.trim()) { toast.error('Account number is required'); return; }
+    try {
+      if (acctEdit) {
+        const r = await api.put(`/reference/banks/${acctBank.id}/accounts/${acctEdit.id}`, acctForm);
+        setBankAccounts(p => p.map(a => a.id === acctEdit.id ? r.data : a));
+        toast.success('Account updated');
+      } else {
+        const r = await api.post(`/reference/banks/${acctBank.id}/accounts`, acctForm);
+        setBankAccounts(p => [...p, r.data]);
+        toast.success('Account created');
+      }
+      setAcctEdit(null);
+      setAcctForm({ account_number: '', account_name: '' });
+    } catch (e) { toast.error(e.response?.data?.detail || 'Save failed'); }
+  };
+
+  const deleteAccount = async (accountId) => {
+    if (!window.confirm('Delete this account?')) return;
+    try {
+      await api.delete(`/reference/banks/${acctBank.id}/accounts/${accountId}`);
+      setBankAccounts(p => p.filter(a => a.id !== accountId));
+      toast.success('Account deleted');
+    } catch (e) { toast.error('Delete failed'); }
+  };
+
+  const editAccount = (acct) => {
+    setAcctEdit(acct);
+    setAcctForm({ account_number: acct.account_number, account_name: acct.account_name || '' });
+  };
+
   return (
     <div data-testid="reference-data-page">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
@@ -117,7 +170,7 @@ export default function ReferenceDataPage() {
                     </TableHeader>
                     <TableBody>
                       {items.map(item => (
-                        <RefRow key={item.id} item={item} isBank={isBank} isCurr={isCurr} onEdit={openEdit} onDelete={del} />
+                        <RefRow key={item.id} item={item} isBank={isBank} isCurr={isCurr} onEdit={openEdit} onDelete={del} onManageAccounts={openAccounts} />
                       ))}
                     </TableBody>
                   </Table>
@@ -177,11 +230,71 @@ export default function ReferenceDataPage() {
         </DialogContent>
       </Dialog>
       )}
+
+      {/* Bank Accounts Management Dialog */}
+      {acctDialogOpen && (
+      <Dialog open={acctDialogOpen} onOpenChange={o => { if (!o) { setAcctDialogOpen(false); setAcctBank(null); } }}>
+        <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto" data-testid="bank-accounts-dialog">
+          <DialogHeader>
+            <DialogTitle style={{ fontFamily: 'Chivo' }}>Manage Accounts — {acctBank?.name}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="flex gap-2 items-end">
+              <div className="flex-1 space-y-1">
+                <Label className="text-xs">Account Number</Label>
+                <Input value={acctForm.account_number} onChange={e => setAcctForm(p => ({ ...p, account_number: e.target.value }))} placeholder="Enter account number" className="h-8 text-xs font-mono" data-testid="acct-number-input" />
+              </div>
+              <div className="flex-1 space-y-1">
+                <Label className="text-xs">Account Name (optional)</Label>
+                <Input value={acctForm.account_name} onChange={e => setAcctForm(p => ({ ...p, account_name: e.target.value }))} placeholder="e.g. USD Operating" className="h-8 text-xs" data-testid="acct-name-input" />
+              </div>
+              <Button size="sm" className="h-8 bg-[#08263e] hover:bg-[#08263e]/90" onClick={saveAccount} data-testid="save-account-btn">
+                {acctEdit ? 'Update' : 'Add'}
+              </Button>
+              {acctEdit && (
+                <Button size="sm" variant="ghost" className="h-8" onClick={() => { setAcctEdit(null); setAcctForm({ account_number: '', account_name: '' }); }}>Cancel</Button>
+              )}
+            </div>
+            {acctLoading ? (
+              <div className="flex items-center justify-center h-20"><div className="animate-spin h-5 w-5 border-4 border-[#518dca] border-t-transparent rounded-full" /></div>
+            ) : bankAccounts.length === 0 ? (
+              <p className="text-center py-8 text-slate-400 text-sm">No accounts yet. Add one above.</p>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-slate-50">
+                    <TableHead>Account Number</TableHead>
+                    <TableHead>Account Name</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {bankAccounts.map(acct => (
+                    <TableRow key={acct.id} data-testid={`acct-row-${acct.id}`}>
+                      <TableCell className="font-mono text-xs font-medium">{acct.account_number}</TableCell>
+                      <TableCell className="text-xs">{acct.account_name || '-'}</TableCell>
+                      <TableCell><Badge className={acct.is_active !== false ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}>{acct.is_active !== false ? 'Active' : 'Inactive'}</Badge></TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-1">
+                          <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => editAccount(acct)} data-testid={`edit-acct-${acct.id}`}><Pencil className="h-3 w-3" /></Button>
+                          <Button size="icon" variant="ghost" className="h-7 w-7 text-red-500 hover:text-red-700" onClick={() => deleteAccount(acct.id)} data-testid={`delete-acct-${acct.id}`}><Trash2 className="h-3 w-3" /></Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+      )}
     </div>
   );
 }
 
-const RefRow = memo(function RefRow({ item, isBank, isCurr, onEdit, onDelete }) {
+const RefRow = memo(function RefRow({ item, isBank, isCurr, onEdit, onDelete, onManageAccounts }) {
   return (
     <TableRow data-testid={`ref-item-${item.id}`}>
       <TableCell className="font-medium text-sm">{item.name}</TableCell>
@@ -196,6 +309,7 @@ const RefRow = memo(function RefRow({ item, isBank, isCurr, onEdit, onDelete }) 
       <TableCell><Badge className={item.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}>{item.is_active ? 'Active' : 'Inactive'}</Badge></TableCell>
       <TableCell className="text-right">
         <div className="flex justify-end gap-1">
+          {isBank && <Button size="sm" variant="outline" className="h-8 text-xs gap-1" onClick={() => onManageAccounts(item)} data-testid={`accounts-${item.id}`}><CreditCard className="h-3 w-3" /> Accounts</Button>}
           <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => onEdit(item)} data-testid={`edit-${item.id}`}><Pencil className="h-3 w-3" /></Button>
           <Button size="icon" variant="ghost" className="h-8 w-8 text-red-500 hover:text-red-700" onClick={() => onDelete(item.id)} data-testid={`delete-${item.id}`}><Trash2 className="h-3 w-3" /></Button>
         </div>

@@ -138,7 +138,10 @@ export default function TreasuryPage() {
   const returned = useMemo(() => filterByBank(data.deals.filter(d => d.status === 'returned')), [data.deals, filterByBank]);
   const done = useMemo(() => filterByBank(data.deals.filter(d => d.status === 'confirmed' || d.status === 'cancelled')), [data.deals, filterByBank]);
 
-  const openReview = useCallback((d) => { _setSel(d); setRemarks(''); }, []);
+  const openReview = useCallback(async (d) => {
+    _setSel(d); setRemarks('');
+    try { const r = await api.get(`/deals/${d.id}`); _setSel(r.data); } catch (e) { console.error(e); }
+  }, []);
   const toggleCol = useCallback((key) => { setCols(p => ({ ...p, [key]: !p[key] })); }, []);
 
   const clientProofs = sel?.settlement_proofs?.filter(p => p.proof_type !== 'processor') || [];

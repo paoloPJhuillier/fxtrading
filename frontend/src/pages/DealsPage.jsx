@@ -11,7 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Separator } from '@/components/ui/separator';
-import { Plus, FileText, Eye, Filter, X, Ban, Image as ImageIcon, Download, Upload, Trash2, RotateCcw, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Plus, FileText, Eye, Filter, X, Ban, Image as ImageIcon, Download, Upload, Trash2, RotateCcw, ChevronLeft, ChevronRight, Clock } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 
@@ -40,7 +40,8 @@ export default function DealsPage() {
   const [cancelling, setCancelling] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [resubmitting, setResubmitting] = useState(false);
-  const fileRef = useRef(null);
+  const clientFileRef = useRef(null);
+  const processorFileRef = useRef(null);
   const navigate = useNavigate();
   const hasLoaded = useRef(false);
 
@@ -107,18 +108,18 @@ export default function DealsPage() {
     finally { setCancelling(false); }
   };
 
-  const uploadProof = async (e) => {
+  const uploadProof = async (e, proofType = 'client') => {
     if (!sel || !e.target.files?.length) return;
     setUploading(true);
     try {
       for (const file of e.target.files) {
         const fd = new FormData();
         fd.append('file', file);
-        await api.post(`/deals/${sel.id}/upload`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+        await api.post(`/deals/${sel.id}/upload?proof_type=${proofType}`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
       }
       const res = await api.get(`/deals/${sel.id}`);
       _setSel(res.data);
-      toast.success('Proof of payment uploaded');
+      toast.success(`${proofType === 'client' ? "Client" : "Processor"} settlement proof uploaded`);
     } catch (err) { toast.error(err.response?.data?.detail || 'Upload failed'); }
     finally { setUploading(false); e.target.value = ''; }
   };
@@ -144,8 +145,12 @@ export default function DealsPage() {
     finally { setResubmitting(false); }
   };
 
-  const viewDeal = useCallback((deal) => {
+  const viewDeal = useCallback(async (deal) => {
     _setSel(deal);
+    try {
+      const res = await api.get(`/deals/${deal.id}`);
+      _setSel(res.data);
+    } catch (e) { console.error(e); }
   }, []);
 
   return (
@@ -295,21 +300,22 @@ export default function DealsPage() {
               {sel.status !== 'returned' && sel.treasury_remarks && (<div className="bg-blue-50 p-3 rounded-md"><p className="text-[10px] text-blue-400 uppercase tracking-wider mb-1">Treasury Remarks</p><p className="text-sm">{sel.treasury_remarks}</p></div>)}
               {sel.cancellation_reason && (<div className="bg-red-50 border border-red-200 p-3 rounded-md"><p className="text-[10px] text-red-400 uppercase tracking-wider mb-1">Cancellation Reason</p><p className="text-sm text-red-700">{sel.cancellation_reason}</p></div>)}
               <Separator />
+              {/* Client's Settlement Proofs */}
               <div>
                 <div className="flex items-center justify-between mb-3">
-                  <p className="text-xs font-medium text-slate-600 uppercase tracking-wider">Proof of Payment</p>
+                  <p className="text-xs font-medium text-slate-600 uppercase tracking-wider">Client's Settlement</p>
                   {(sel.status === 'pending' || sel.status === 'returned') && (
                     <div>
-                      <input type="file" ref={fileRef} className="hidden" accept="image/*" multiple onChange={uploadProof} />
-                      <Button size="sm" variant="outline" onClick={() => fileRef.current?.click()} disabled={uploading} data-testid="upload-proof-btn">
-                        <Upload className="h-3 w-3 mr-1.5" /> {uploading ? 'Uploading...' : 'Upload Proof'}
+                      <input type="file" ref={clientFileRef} className="hidden" accept="image/*,.pdf" multiple onChange={e => uploadProof(e, 'client')} />
+                      <Button size="sm" variant="outline" onClick={() => clientFileRef.current?.click()} disabled={uploading} data-testid="upload-client-proof-btn">
+                        <Upload className="h-3 w-3 mr-1.5" /> {uploading ? 'Uploading...' : 'Upload'}
                       </Button>
                     </div>
                   )}
                 </div>
-                {sel.settlement_proofs?.length > 0 ? (
+                {(sel.settlement_proofs?.filter(p => p.proof_type !== 'processor') || []).length > 0 ? (
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                    {sel.settlement_proofs.map(p => (
+                    {sel.settlement_proofs.filter(p => p.proof_type !== 'processor').map(p => (
                       <div key={p.id} className="relative group border rounded-lg overflow-hidden">
                         <img src={`${BACKEND_URL}/api/files/${p.path}`} alt={p.filename} className="w-full h-28 object-cover" loading="lazy" decoding="async" />
                         <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
@@ -323,12 +329,54 @@ export default function DealsPage() {
                     ))}
                   </div>
                 ) : (
-                  <div className="text-center py-6 border border-dashed rounded-lg">
-                    <ImageIcon className="h-8 w-8 text-slate-300 mx-auto mb-2" />
-                    <p className="text-xs text-slate-400">No proof of payment uploaded yet</p>
+                  <div className="text-center py-4 border border-dashed rounded-lg">
+                    <ImageIcon className="h-6 w-6 text-slate-300 mx-auto mb-1" />
+                    <p className="text-[10px] text-slate-400">No client settlement proofs</p>
                   </div>
                 )}
               </div>
+              {/* Processor's Settlement Proofs */}
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-xs font-medium text-slate-600 uppercase tracking-wider">Processor's Settlement</p>
+                  {(sel.status === 'pending' || sel.status === 'returned') && (
+                    <div>
+                      <input type="file" ref={processorFileRef} className="hidden" accept="image/*,.pdf" multiple onChange={e => uploadProof(e, 'processor')} />
+                      <Button size="sm" variant="outline" onClick={() => processorFileRef.current?.click()} disabled={uploading} data-testid="upload-processor-proof-btn">
+                        <Upload className="h-3 w-3 mr-1.5" /> {uploading ? 'Uploading...' : 'Upload'}
+                      </Button>
+                    </div>
+                  )}
+                </div>
+                {(sel.settlement_proofs?.filter(p => p.proof_type === 'processor') || []).length > 0 ? (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                    {sel.settlement_proofs.filter(p => p.proof_type === 'processor').map(p => (
+                      <div key={p.id} className="relative group border rounded-lg overflow-hidden">
+                        <img src={`${BACKEND_URL}/api/files/${p.path}`} alt={p.filename} className="w-full h-28 object-cover" loading="lazy" decoding="async" />
+                        <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                          <a href={`${BACKEND_URL}/api/files/${p.path}`} target="_blank" rel="noopener noreferrer" className="text-white"><Eye className="h-4 w-4" /></a>
+                          {(sel.status === 'pending' || sel.status === 'returned') && (
+                            <button onClick={() => deleteProof(p.id)} className="text-white hover:text-red-300"><Trash2 className="h-4 w-4" /></button>
+                          )}
+                        </div>
+                        <p className="text-[10px] text-slate-500 p-1.5 truncate">{p.filename}</p>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-4 border border-dashed rounded-lg">
+                    <ImageIcon className="h-6 w-6 text-slate-300 mx-auto mb-1" />
+                    <p className="text-[10px] text-slate-400">No processor settlement proofs</p>
+                  </div>
+                )}
+              </div>
+              {/* Deal History */}
+              {sel.history?.length > 0 && (
+                <>
+                  <Separator />
+                  <DealHistorySection history={sel.history} />
+                </>
+              )}
             </div>
           )}
         </DialogContent>
@@ -413,3 +461,47 @@ const DealRow = memo(function DealRow({ deal, onView }) {
     </TableRow>
   );
 });
+
+const HISTORY_COLORS = {
+  created: 'bg-blue-100 text-blue-700',
+  deal_confirmed: 'bg-green-100 text-green-700',
+  deal_returned: 'bg-red-100 text-red-700',
+  deal_cancelled: 'bg-slate-200 text-slate-600',
+  deal_resubmitted: 'bg-purple-100 text-purple-700',
+  deal_edited: 'bg-amber-100 text-amber-700',
+  proof_uploaded: 'bg-cyan-100 text-cyan-700',
+};
+
+function DealHistorySection({ history }) {
+  return (
+    <div data-testid="deal-history">
+      <p className="text-xs font-medium text-slate-600 uppercase tracking-wider mb-3">Deal History</p>
+      <div className="space-y-3">
+        {[...history].reverse().map(h => (
+          <div key={h.id} className="flex gap-3 items-start">
+            <div className="flex-shrink-0 mt-0.5">
+              <Clock className="h-3.5 w-3.5 text-slate-400" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <Badge className={`${HISTORY_COLORS[h.action] || 'bg-slate-100 text-slate-600'} text-[10px] px-1.5 py-0`}>{h.action.replace(/_/g, ' ')}</Badge>
+                <span className="text-[11px] text-slate-500">{h.user_name} ({h.user_role})</span>
+                <span className="text-[10px] text-slate-400">{format(new Date(h.timestamp), 'dd MMM yyyy HH:mm')}</span>
+              </div>
+              {h.remarks && <p className="text-xs text-slate-600 mt-1">{h.remarks}</p>}
+              {h.changes?.length > 0 && (
+                <div className="mt-1 space-y-0.5">
+                  {h.changes.map((c, i) => (
+                    <p key={i} className="text-[11px] text-slate-500">
+                      <span className="font-medium">{c.field}:</span> <span className="line-through text-red-400">{c.old_value || '(empty)'}</span> <span className="text-green-600">{c.new_value}</span>
+                    </p>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}

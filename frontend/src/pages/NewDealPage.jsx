@@ -14,7 +14,7 @@ import { Command, CommandInput, CommandList, CommandEmpty, CommandGroup, Command
 import { Calendar } from '@/components/ui/calendar';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Separator } from '@/components/ui/separator';
-import { CalendarIcon, ArrowLeft, ChevronsUpDown, Check, AlertTriangle, Upload, X as XIcon, ImageIcon } from 'lucide-react';
+import { CalendarIcon, ArrowLeft, ChevronsUpDown, Check, AlertTriangle, Upload, X as XIcon, ImageIcon, Plus } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 
@@ -23,17 +23,19 @@ export default function NewDealPage() {
   const [submitting, setSubmitting] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [errors, setErrors] = useState({});
-  const [proofFiles, setProofFiles] = useState([]);
-  const proofRef = useRef(null);
+  const [clientProofFiles, setClientProofFiles] = useState([]);
+  const [processorProofFiles, setProcessorProofFiles] = useState([]);
+  const clientProofRef = useRef(null);
+  const processorProofRef = useRef(null);
   const { data: ref } = useRefData();
   const safeRef = ref || { companies: [], banks: [], txTypes: [], tfTypes: [], currencies: [] };
 
-  // Defer heavy sections (Source/Dest/Ours) to not block first paint
   const [heavyReady, setHeavyReady] = useState(false);
   useEffect(() => {
     const id = requestAnimationFrame(() => setHeavyReady(true));
     return () => cancelAnimationFrame(id);
   }, []);
+
   const [f, setF] = useState({
     transaction_type: '', transfer_type: '', client_name: '',
     deal_date: new Date(), value_date: new Date(),
@@ -44,7 +46,6 @@ export default function NewDealPage() {
     currency_amount: '', amount: '', rate: '', remarks: ''
   });
 
-  // Stable handler — uses only functional updaters, no external deps
   const up = useCallback((k, v) => {
     setF(p => {
       const next = { ...p, [k]: v };
@@ -56,15 +57,16 @@ export default function NewDealPage() {
       if (k === 'from_type') { next.from_bank = ''; next.from_account_num = ''; next.from_wallet_address = ''; }
       if (k === 'to_type') { next.to_bank = ''; next.to_account_num = ''; next.to_wallet_address = ''; }
       if (k === 'ours_type') { next.ours_bank = ''; next.ours_account_num = ''; next.ours_wallet_address = ''; }
+      if (k === 'from_bank') { next.from_account_num = ''; }
+      if (k === 'to_bank') { next.to_account_num = ''; }
+      if (k === 'ours_bank') { next.ours_account_num = ''; }
       return next;
     });
     setErrors(p => p[k] ? { ...p, [k]: null } : p);
   }, []);
 
-  // Single stable callback for all native inputs (uses e.target.name)
   const onInput = useCallback(e => up(e.target.name, e.target.value), [up]);
 
-  // Memoized derived arrays — stable refs unless currencies change
   const fiat = useMemo(() => safeRef.currencies.filter(c => c.type === 'fiat'), [safeRef.currencies]);
   const stablecoin = useMemo(() => safeRef.currencies.filter(c => c.type === 'stablecoin'), [safeRef.currencies]);
   const crypto = useMemo(() => safeRef.currencies.filter(c => c.type === 'crypto'), [safeRef.currencies]);
@@ -97,14 +99,21 @@ export default function NewDealPage() {
     setConfirmOpen(true);
   };
 
-  const addProofFiles = useCallback((e) => {
+  const addClientProofs = useCallback((e) => {
     const files = Array.from(e.target.files || []);
-    setProofFiles(p => [...p, ...files]);
-    if (proofRef.current) proofRef.current.value = '';
+    setClientProofFiles(p => [...p, ...files]);
+    if (clientProofRef.current) clientProofRef.current.value = '';
   }, []);
-
-  const removeProofFile = useCallback((idx) => {
-    setProofFiles(p => p.filter((_, i) => i !== idx));
+  const addProcessorProofs = useCallback((e) => {
+    const files = Array.from(e.target.files || []);
+    setProcessorProofFiles(p => [...p, ...files]);
+    if (processorProofRef.current) processorProofRef.current.value = '';
+  }, []);
+  const removeClientProof = useCallback((idx) => {
+    setClientProofFiles(p => p.filter((_, i) => i !== idx));
+  }, []);
+  const removeProcessorProof = useCallback((idx) => {
+    setProcessorProofFiles(p => p.filter((_, i) => i !== idx));
   }, []);
 
   const submit = async () => {
@@ -119,13 +128,19 @@ export default function NewDealPage() {
         rate: parseFloat(f.rate) || 0,
       });
       const dealId = res.data.id;
-      if (proofFiles.length > 0) {
-        for (const file of proofFiles) {
+      const totalProofs = clientProofFiles.length + processorProofFiles.length;
+      if (totalProofs > 0) {
+        for (const file of clientProofFiles) {
           const fd = new FormData();
           fd.append('file', file);
-          await api.post(`/deals/${dealId}/upload`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+          await api.post(`/deals/${dealId}/upload?proof_type=client`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
         }
-        toast.success(`Deal created with ${proofFiles.length} proof(s) uploaded`);
+        for (const file of processorProofFiles) {
+          const fd = new FormData();
+          fd.append('file', file);
+          await api.post(`/deals/${dealId}/upload?proof_type=processor`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+        }
+        toast.success(`Deal created with ${totalProofs} proof(s) uploaded`);
       } else {
         toast.success('Deal ticket created successfully');
       }
@@ -212,9 +227,7 @@ export default function NewDealPage() {
               {f.from_type === 'bank' ? (
                 <>
                   <SearchSelect label="Bank" value={f.from_bank} name="from_bank" onChange={up} items={safeRef.banks} displayKey="name" tid="from-bank" placeholder="Search bank..." error={errors.from_bank} />
-                  <VField label="Account Number" error={errors.from_account_num}>
-                    <Input name="from_account_num" value={f.from_account_num} onChange={onInput} placeholder="Enter account number" data-testid="from-account-input" className={errors.from_account_num ? 'border-red-400' : ''} />
-                  </VField>
+                  <BankAccountSelect bankName={f.from_bank} value={f.from_account_num} name="from_account_num" onChange={up} banks={safeRef.banks} tid="from-account" error={errors.from_account_num} />
                 </>
               ) : (
                 <VField label="Wallet Address" error={errors.from_wallet_address}>
@@ -236,9 +249,7 @@ export default function NewDealPage() {
               {f.to_type === 'bank' ? (
                 <>
                   <SearchSelect label="Bank" value={f.to_bank} name="to_bank" onChange={up} items={safeRef.banks} displayKey="name" tid="to-bank" placeholder="Search bank..." error={errors.to_bank} />
-                  <VField label="Account Number" error={errors.to_account_num}>
-                    <Input name="to_account_num" value={f.to_account_num} onChange={onInput} placeholder="Enter account number" data-testid="to-account-input" className={errors.to_account_num ? 'border-red-400' : ''} />
-                  </VField>
+                  <BankAccountSelect bankName={f.to_bank} value={f.to_account_num} name="to_account_num" onChange={up} banks={safeRef.banks} tid="to-account" error={errors.to_account_num} />
                 </>
               ) : (
                 <VField label="Wallet Address" error={errors.to_wallet_address}>
@@ -266,9 +277,7 @@ export default function NewDealPage() {
               {f.ours_type === 'bank' ? (
                 <>
                   <SearchSelect label="Bank" value={f.ours_bank} name="ours_bank" onChange={up} items={safeRef.banks} displayKey="name" tid="ours-bank" placeholder="Search bank..." error={errors.ours_bank} />
-                  <VField label="Account Number" error={errors.ours_account_num}>
-                    <Input name="ours_account_num" value={f.ours_account_num} onChange={onInput} placeholder="Enter account number" data-testid="ours-account-input" className={errors.ours_account_num ? 'border-red-400' : ''} />
-                  </VField>
+                  <BankAccountSelect bankName={f.ours_bank} value={f.ours_account_num} name="ours_account_num" onChange={up} banks={safeRef.banks} tid="ours-account" error={errors.ours_account_num} />
                 </>
               ) : (
                 <VField label="Wallet Address" error={errors.ours_wallet_address}>
@@ -289,33 +298,12 @@ export default function NewDealPage() {
 
         <Card className="mt-6">
           <CardHeader>
-            <CardTitle className="text-base text-[#08263e]" style={{ fontFamily: 'Chivo' }}>Proof of Payment (optional)</CardTitle>
-            <p className="text-xs text-slate-400 mt-1">Upload settlement proof documents or screenshots</p>
+            <CardTitle className="text-base text-[#08263e]" style={{ fontFamily: 'Chivo' }}>Settlement Proofs (optional)</CardTitle>
+            <p className="text-xs text-slate-400 mt-1">Upload separate proofs for client and processor settlements</p>
           </CardHeader>
-          <CardContent>
-            <input type="file" ref={proofRef} className="hidden" accept="image/*,.pdf,.doc,.docx" multiple onChange={addProofFiles} data-testid="proof-file-input" />
-            <Button type="button" variant="outline" className="w-full h-20 border-dashed border-2 hover:border-[#518dca] hover:bg-slate-50" onClick={() => proofRef.current?.click()} data-testid="proof-upload-btn">
-              <div className="flex flex-col items-center gap-1 text-slate-400">
-                <Upload className="h-5 w-5" />
-                <span className="text-xs">Click to select files</span>
-              </div>
-            </Button>
-            {proofFiles.length > 0 && (
-              <div className="mt-3 space-y-2" data-testid="proof-file-list">
-                {proofFiles.map((file, i) => (
-                  <div key={i} className="flex items-center gap-3 p-2 rounded-md bg-slate-50 border" data-testid={`proof-file-${i}`}>
-                    <ImageIcon className="h-4 w-4 text-slate-400 flex-shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-medium truncate">{file.name}</p>
-                      <p className="text-[10px] text-slate-400">{(file.size / 1024).toFixed(1)} KB</p>
-                    </div>
-                    <Button type="button" variant="ghost" size="icon" className="h-6 w-6 flex-shrink-0" onClick={() => removeProofFile(i)} data-testid={`remove-proof-${i}`}>
-                      <XIcon className="h-3 w-3" />
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            )}
+          <CardContent className="space-y-6">
+            <ProofUploadSection label="Client's Settlement" files={clientProofFiles} fileRef={clientProofRef} onAdd={addClientProofs} onRemove={removeClientProof} testIdPrefix="client-proof" />
+            <ProofUploadSection label="Processor's Settlement" files={processorProofFiles} fileRef={processorProofRef} onAdd={addProcessorProofs} onRemove={removeProcessorProof} testIdPrefix="processor-proof" />
           </CardContent>
         </Card>
 
@@ -365,10 +353,11 @@ export default function NewDealPage() {
             {f.ours_type === 'bank' ? (<><CR label="Bank" val={f.ours_bank} /><CR label="Account Number" val={f.ours_account_num} mono /></>) : (<CR label="Wallet Address" val={f.ours_wallet_address} mono />)}
           </div>
           {f.remarks && (<><Separator /><div><p className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Remarks</p><p className="text-sm">{f.remarks}</p></div></>)}
-          {proofFiles.length > 0 && (
+          {(clientProofFiles.length > 0 || processorProofFiles.length > 0) && (
             <div className="bg-blue-50 border border-blue-200 p-3 rounded-md">
-              <p className="text-xs font-medium text-blue-700">{proofFiles.length} proof file(s) will be uploaded</p>
-              <div className="mt-1 space-y-0.5">{proofFiles.map((f, i) => <p key={i} className="text-[10px] text-blue-500 truncate">{f.name}</p>)}</div>
+              <p className="text-xs font-medium text-blue-700">{clientProofFiles.length + processorProofFiles.length} proof file(s) will be uploaded</p>
+              {clientProofFiles.length > 0 && <><p className="text-[10px] text-blue-600 font-medium mt-1">Client's Settlement:</p>{clientProofFiles.map((pf, i) => <p key={`c${i}`} className="text-[10px] text-blue-500 truncate">{pf.name}</p>)}</>}
+              {processorProofFiles.length > 0 && <><p className="text-[10px] text-blue-600 font-medium mt-1">Processor's Settlement:</p>{processorProofFiles.map((pf, i) => <p key={`p${i}`} className="text-[10px] text-blue-500 truncate">{pf.name}</p>)}</>}
             </div>
           )}
           {f.buy_currency && f.sell_currency && f.currency_amount && f.rate && (
@@ -401,7 +390,37 @@ function CR({ label, val, mono }) {
   return (<div><p className="text-[10px] text-slate-400 uppercase tracking-wider">{label}</p><p className={`text-sm font-medium ${mono ? 'font-mono' : ''}`}>{val || '-'}</p></div>);
 }
 
-// Memo'd — stable onChange(name, value) + name prop prevents re-renders
+function ProofUploadSection({ label, files, fileRef, onAdd, onRemove, testIdPrefix }) {
+  return (
+    <div>
+      <p className="text-xs font-medium text-slate-600 uppercase tracking-wider mb-2">{label}</p>
+      <input type="file" ref={fileRef} className="hidden" accept="image/*,.pdf,.doc,.docx" multiple onChange={onAdd} data-testid={`${testIdPrefix}-file-input`} />
+      <Button type="button" variant="outline" className="w-full h-16 border-dashed border-2 hover:border-[#518dca] hover:bg-slate-50" onClick={() => fileRef.current?.click()} data-testid={`${testIdPrefix}-upload-btn`}>
+        <div className="flex flex-col items-center gap-1 text-slate-400">
+          <Upload className="h-4 w-4" />
+          <span className="text-[11px]">Click to select files</span>
+        </div>
+      </Button>
+      {files.length > 0 && (
+        <div className="mt-2 space-y-1.5" data-testid={`${testIdPrefix}-file-list`}>
+          {files.map((file, i) => (
+            <div key={i} className="flex items-center gap-3 p-2 rounded-md bg-slate-50 border" data-testid={`${testIdPrefix}-file-${i}`}>
+              <ImageIcon className="h-4 w-4 text-slate-400 flex-shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-medium truncate">{file.name}</p>
+                <p className="text-[10px] text-slate-400">{(file.size / 1024).toFixed(1)} KB</p>
+              </div>
+              <Button type="button" variant="ghost" size="icon" className="h-6 w-6 flex-shrink-0" onClick={() => onRemove(i)} data-testid={`${testIdPrefix}-remove-${i}`}>
+                <XIcon className="h-3 w-3" />
+              </Button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 const TypeToggle = memo(function TypeToggle({ value, name, onChange, testId }) {
   return (
     <div className="flex gap-1 p-0.5 bg-slate-100 rounded-md w-fit">
@@ -514,6 +533,102 @@ const CurrSel = memo(function CurrSel({ label, value, name, onChange, fiat, stab
               {crypto.length > 0 && <CommandGroup heading="Cryptocurrencies">{crypto.map(c => <CurrItem key={c.id} c={c} value={value} onSelect={handleSelect} />)}</CommandGroup>}
             </CommandList>
           </Command>
+        </PopoverContent>
+      </Popover>
+    </VField>
+  );
+});
+
+const BankAccountSelect = memo(function BankAccountSelect({ bankName, value, name, onChange, banks, tid, error }) {
+  const [accounts, setAccounts] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [open, setOpen] = useState(false);
+  const [newMode, setNewMode] = useState(false);
+  const [newAcct, setNewAcct] = useState('');
+  const [adding, setAdding] = useState(false);
+
+  const bankId = useMemo(() => banks.find(b => b.name === bankName)?.id, [bankName, banks]);
+
+  useEffect(() => {
+    if (!bankId) { setAccounts([]); return; }
+    let cancelled = false;
+    setLoading(true);
+    api.get(`/reference/banks/${bankId}/accounts`)
+      .then(r => { if (!cancelled) setAccounts(r.data.filter(a => a.is_active !== false)); })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [bankId]);
+
+  const addAccount = async () => {
+    if (!newAcct.trim() || !bankId) return;
+    setAdding(true);
+    try {
+      const r = await api.post(`/reference/banks/${bankId}/accounts`, { account_number: newAcct.trim() });
+      setAccounts(p => [...p, r.data]);
+      onChange(name, newAcct.trim());
+      setNewAcct(''); setNewMode(false); setOpen(false);
+      toast.success('Account added');
+    } catch (e) { toast.error('Failed to add account'); }
+    finally { setAdding(false); }
+  };
+
+  if (!bankName) {
+    return (
+      <VField label="Account Number" error={error}>
+        <Input disabled placeholder="Select a bank first" className="bg-slate-50" data-testid={`${tid}-input`} />
+      </VField>
+    );
+  }
+
+  return (
+    <VField label="Account Number" error={error}>
+      <Popover open={open} onOpenChange={o => { setOpen(o); if (!o) { setNewMode(false); setNewAcct(''); } }}>
+        <PopoverTrigger asChild>
+          <Button variant="outline" role="combobox" className={`w-full justify-between text-left font-normal h-9 text-sm font-mono ${error ? 'border-red-400' : ''}`} data-testid={`${tid}-select`}>
+            <span className="truncate">{value || 'Select account...'}</span>
+            <ChevronsUpDown className="ml-1 h-3.5 w-3.5 shrink-0 text-slate-400" />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-[280px] p-0" align="start">
+          {newMode ? (
+            <div className="p-3 space-y-2">
+              <p className="text-xs font-medium text-slate-600">Add New Account</p>
+              <Input value={newAcct} onChange={e => setNewAcct(e.target.value)} placeholder="Enter account number" className="h-8 text-xs font-mono" data-testid={`${tid}-new-input`} autoFocus />
+              <div className="flex gap-2 justify-end">
+                <Button type="button" size="sm" variant="ghost" className="h-7 text-xs" onClick={() => { setNewMode(false); setNewAcct(''); }}>Cancel</Button>
+                <Button type="button" size="sm" className="h-7 text-xs bg-[#08263e] hover:bg-[#08263e]/90" onClick={addAccount} disabled={adding || !newAcct.trim()} data-testid={`${tid}-add-btn`}>
+                  {adding ? 'Adding...' : 'Add'}
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <Command>
+              <CommandInput placeholder="Search accounts..." data-testid={`${tid}-search`} />
+              <CommandList>
+                {loading ? (
+                  <div className="py-6 text-center text-xs text-slate-400">Loading accounts...</div>
+                ) : accounts.length === 0 ? (
+                  <CommandEmpty>No accounts found for this bank.</CommandEmpty>
+                ) : (
+                  <CommandGroup>
+                    {accounts.map(a => (
+                      <CommandItem key={a.id} value={a.account_number} onSelect={() => { onChange(name, a.account_number); setOpen(false); }}>
+                        <Check className={cn("mr-2 h-3 w-3", value === a.account_number ? "opacity-100" : "opacity-0")} />
+                        <span className="font-mono text-xs">{a.account_number}</span>
+                        {a.account_name && <span className="ml-2 text-xs text-slate-400">{a.account_name}</span>}
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
+                )}
+                <div className="border-t p-1">
+                  <button type="button" className="w-full text-left px-2 py-1.5 text-xs text-[#518dca] hover:bg-slate-50 rounded flex items-center gap-1.5" onClick={() => setNewMode(true)} data-testid={`${tid}-add-new-btn`}>
+                    <Plus className="h-3 w-3" /> Add New Account
+                  </button>
+                </div>
+              </CommandList>
+            </Command>
+          )}
         </PopoverContent>
       </Popover>
     </VField>
