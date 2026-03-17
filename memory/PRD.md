@@ -1,79 +1,89 @@
-# FX Trading Tracker - Product Requirements Document
+# FX Trading Tracker — PRD
 
 ## Original Problem Statement
-Mobile-responsive full-stack FX Trading Tracker platform with:
-- Secure login with role-based access (Admin, Trader, Treasury Operations)
-- Trader: Log Deal Tickets, cancel submitted deals, resubmit returned deals
-- Treasury: View/process Deal Tickets (confirm/return), upload settlement proofs, mandatory remarks
-- Admin: Manage reference data, manage users, view audit trail
-- All roles: Export deal data to CSV
-- Crypto + Fiat currency support, Bank/Crypto toggles, "Ours" section
-- Server-side pagination, lazy loading, performant UI
+Build an FX Trading Tracker platform with secure role-based login, deal ticket management for traders, processing capabilities for treasury operations, and admin features for user management and audit trails.
+
+## User Personas
+- **Trader**: Creates and manages FX deal tickets
+- **Treasury**: Processes deal tickets (confirm, return, cancel)
+- **Admin**: Manages users, reference data, and views audit trails
+
+## Core Requirements
+1. Role-based authentication (Trader, Treasury, Admin)
+2. Deal ticket lifecycle: Create → Pending → Processed/Returned/Cancelled
+3. Reference data management (Banks, Companies, Currencies, Transaction/Transfer Types)
+4. Dashboard with analytics and charts
+5. Audit logging of all actions
 
 ## Architecture
-- **Backend:** FastAPI + MongoDB (motor) + JWT auth
-- **Frontend:** React + TailwindCSS + Shadcn UI
-- **Storage:** Emergent Object Storage for settlement proofs
-- **DB Collections:** users, deals, audit_logs
+- **Frontend**: React, React Router, TailwindCSS, Shadcn/UI
+- **Backend**: FastAPI, MongoDB (motor), Pydantic
+- **Storage**: Emergent Object Storage for file uploads
 
 ## Credentials
 - Trader: trader@fxtracker.com / Trader@123
 - Treasury: treasury@fxtracker.com / Treasury@123
 - Admin: admin@fxtracker.com / Admin@123
 
+## Key DB Schema
+- **users**: `{username, email, hashed_password, role, first_name, last_name}`
+- **deals**: `{..., status, proofs: [{filename, url, proof_type: 'client'|'processor'}], history: [{timestamp, user_email, action, details}]}`
+- **bank_accounts**: `{bank_id, account_number, account_name, is_active}`
+- **audit_logs**: `{timestamp, user_email, user_role, action, entity_type, entity_id, details}`
+
+---
+
 ## What's Been Implemented
-- [x] Role-based authentication (Admin, Trader, Treasury)
-- [x] Complete deal lifecycle: create, review, confirm, return, cancel, resubmit
-- [x] Server-side pagination on all tables
-- [x] Debounced filter inputs
-- [x] CSV export for deals
-- [x] Audit trail page (Admin)
-- [x] User management (Admin)
-- [x] Settlement proof upload (Treasury)
-- [x] Bank/Crypto toggle and "Ours" section on deal form
-- [x] **P0 Performance Fix (Feb 2026):** React.memo on all table rows (DealRow, TreasuryRow, TxRow, UserRow, AuditRow) + useCallback for handlers. Modal open times reduced from ~12s to <0.2s
-- [x] **Dialog Close Overlay Fix (Mar 2026):** Reduced overlay from bg-black/80 to bg-black/40, sped up animation to 150ms, and implemented useRef pattern to preserve dialog content during exit animation. Eliminates black flash on modal close.
-- [x] **Comprehensive Performance Overhaul (Mar 2026):**
-  - Auth: Reads localStorage immediately, no longer blocks app rendering
-  - Code splitting: React.lazy for all page components (reduces initial bundle)
-  - Dashboard: Skeleton UI on first load, opacity fade on range change (keeps data visible)
-  - All tables: Keep previous data visible during loading (opacity fade instead of blocking spinner)
-  - Backend: Dashboard uses MongoDB $facet aggregation (no longer loads all docs into memory)
-  - Layout: SidebarContent extracted as memo'd component
-  - Dashboard table: RecentDealRow memo'd
-  - Eliminated MutationObserver on document.body (was firing on every DOM mutation from dialog/toast portals). Replaced with CSS-only badge hiding.
-- [x] **NewDealPage Performance Rewrite (Mar 2026):**
-  - Moved TypeToggle outside component (was causing unmount/remount 3x per keystroke)
-  - All sub-components memo'd: TypeToggle, SearchSelect, CurrSel, DatePick, CurrItem
-  - Stable callbacks: up() with useCallback + functional updaters, single onInput using e.target.name
-  - useMemo for derived currency arrays (fiat, stablecoin, crypto)
-  - Name-based onChange pattern: onChange(name, value) for all memo'd components
-- [x] **ReferenceDataPage Optimization (Mar 2026):** RefRow memo, useCallback for openEdit/del, smooth loading pattern
-- [x] **StrictMode & CSS Performance Fix (Mar 2026):**
-  - Removed React.StrictMode (was doubling all renders, effects, and API calls)
-  - Replaced `transition-all` with `transition-colors` on interactive elements (prevents layout thrashing)
-  - Fixed tabs.jsx, Layout.jsx nav links, TypeToggle buttons
-- [x] **Loading Flash Fix (Mar 2026):** Applied hasLoaded ref pattern across all 6 data pages — loading spinner only shows on initial load, subsequent fetches (filter/pagination/tab) update silently. Debounce reduced from 400ms to 250ms.
-- [x] **Proof of Payment Upload at Deal Creation (Mar 2026):** Trader can select and upload settlement proof files during deal creation. Files uploaded after deal is created via POST /deals/{id}/upload.
-- [x] **Global RefData Cache (Mar 2026):** Created RefDataContext to fetch reference data once on login and cache globally. NewDealPage loads instantly (106ms on repeat visit) with pre-populated dropdowns — eliminated 5 API calls per visit. ReferenceDataPage mutations invalidate the cache via reload().
-- [x] **Instant Deal Dialog (Mar 2026):** Eliminated redundant API call when viewing deal detail on My Deals page — dialog now opens in 78ms using data already in table row.
-- [x] **Dashboard Stats Caching (Mar 2026):** Module-level cache (`statsCache`, `cachedRange`) persists across unmount/remount. Return navigation to Dashboard renders in ~128ms with zero skeleton/loading states. Cache invalidates automatically on date range change. Verified for all 3 roles.
-- [x] **Dashboard Chart Performance (Mar 2026):** Disabled recharts default animations (`isAnimationActive={false}`) on Bar and Pie charts — eliminates 1.5s SVG animation jank. Extracted DealsChart/StatusChart as memo'd components. Memoized pieData with useMemo and Metric with React.memo.
-- [x] **Idle Page Prefetching (Mar 2026):** All React.lazy page chunks are prefetched via `requestIdleCallback` after login. Eliminates Suspense spinner on first navigation to any page. New Deal page loads in ~108ms on repeat visits.
-- [x] **Browser Hang / CPU Drain Fix (Mar 2026):** Root cause: MutationObserver on document.body in index.html watching every DOM change (childList, subtree, attributes) — fired on every React render. Removed. Also: eliminated duplicate Google Fonts CSS @import (was loaded twice), switched to non-blocking font load (media=print onload), reduced font weights (10→5), removed 28 debug-wrapper CSS inherit rules, staggered idle prefetch (150ms between chunks vs all-at-once), optimized login image (q=60, w=800, decoding=async).
-- [x] **Memory Leak Fixes (Mar 2026):** Added AbortController to ALL data-fetching useEffects across 8 files (DealsPage, TreasuryPage, AuditLogPage, TransactionHistoryPage, UsersPage, ReferenceDataPage, DashboardPage, refdata.js) — aborts pending API calls on unmount, prevents state updates on unmounted components. Fixed toast removal delay from 1,000,000ms (16.7 min) to 5,000ms. Fixed toast useEffect re-subscription leak ([state] → []). Added prefetch chain cleanup in App.js.
-- [x] **Deferred Rendering & Conditional Dialog Mounting (Mar 2026):** NewDealPage: Source/Dest/Ours/Remarks/Proof sections deferred to next frame via requestAnimationFrame — Deal Info + Amounts render first, heavy sections appear imperceptibly after. All dialog-heavy pages (Deals, Treasury, Transactions, Users, ReferenceData): Dialog trees conditionally mounted with {open && <Dialog>} — completely removed from both VDOM and DOM when closed, reducing event listeners and DOM nodes across the entire app.
-- [x] **Deployment Readiness Fixes (Mar 2026):** Fixed 4 DB query optimization blockers: export limit 100K→10K, reference data limit 10K→1K, added deals list projection. Fixed .gitignore blocking .env files and malformed entries. App passed deployment health check.
 
-## P0/P1/P2 Backlog
-- No pending issues or feature requests. All performance optimizations complete.
-- [x] **First Name / Last Name (Mar 2026):** Replaced single `name` field with `first_name` + `last_name` across backend model, seed data, JWT token, login response, audit logging, all API endpoints. Added DB migration to split existing user names. Frontend: Layout sidebar, header, avatar initials, Admin Users page (add/edit form with separate fields, table display).
-- [x] **Change Password (Mar 2026):** New `PUT /api/auth/change-password` endpoint validates current password before allowing change. Frontend: Change Password dialog accessible from sidebar for all roles (Trader, Treasury, Admin), with current/new/confirm fields and client-side validation.
+### Core Platform (Complete)
+- Full auth system with JWT tokens
+- Deal ticket CRUD with full lifecycle
+- Dashboard with charts and analytics
+- Treasury deal queue with tabs (Pending, Processed, Returned)
+- Admin pages: Users, Reference Data, Audit Logs
+- File upload with Emergent Object Storage
 
-## Key Files
-- `backend/server.py` - All API endpoints
-- `frontend/src/pages/DealsPage.jsx` - Trader deals view (DealRow memo)
-- `frontend/src/pages/TreasuryPage.jsx` - Treasury review (TreasuryRow memo)
-- `frontend/src/pages/TransactionHistoryPage.jsx` - Admin transaction history (TxRow memo)
-- `frontend/src/pages/UsersPage.jsx` - Admin user management (UserRow memo)
-- `frontend/src/pages/AuditLogPage.jsx` - Admin audit trail (AuditRow memo)
+### Performance Optimizations (Complete)
+- Removed MutationObserver from index.html
+- AbortController cleanup in all useEffect hooks
+- Lazy loading with prefetching for pages
+- Deferred rendering on heavy pages
+- Conditional dialog mounting
+- Component memoization throughout
+
+### User Management Enhancements (Complete)
+- Split name into first_name/last_name
+- Change password feature
+- Data migration for existing users
+
+### Bank Account Management (Complete - Mar 17, 2026)
+- CRUD API endpoints for bank accounts under banks
+- BankAccountSelect dropdown on NewDealPage (auto-loads when bank selected)
+- Inline "Add New Account" capability from deal form
+- Admin bank accounts management dialog in Reference Data
+- Account number auto-clears when bank changes
+
+### Deal History Timeline (Complete - Mar 17, 2026)
+- History array on all deals tracking status changes
+- Visible in deal detail dialogs (DealsPage + TreasuryPage)
+- Auto-recorded on create, confirm, return, cancel, edit, proof upload
+- Legacy data backfill on startup
+
+### Split Settlement Proofs (Complete - Mar 17, 2026)
+- Separate "Client's Settlement" and "Processor's Settlement" upload sections
+- Implemented on NewDealPage, DealsPage, and TreasuryPage
+- proof_type parameter on upload API
+- Legacy proofs backfilled as 'client' type
+
+### Dashboard & Treasury Enhancements (Complete)
+- "Today" and "Yesterday" date shortcuts on Dashboard
+- "Returned" tab on Treasury Deal Queue
+- Bank Name column, From/To Bank filters
+- Column visibility toggle
+
+---
+
+## Backlog / Future Tasks
+- **P3**: Backend refactoring — split server.py into routes/, models/, services/
+- **P3**: Export deals to CSV/Excel
+- **P3**: Email notifications for deal status changes

@@ -950,6 +950,14 @@ async def seed_data():
 @app.on_event("startup")
 async def startup():
     await seed_data()
+    # Backfill: Add empty history array to old deals
+    await db.deals.update_many({"history": {"$exists": False}}, {"$set": {"history": []}})
+    # Backfill: Add proof_type='client' to old proofs without it
+    await db.deals.update_many(
+        {"settlement_proofs": {"$elemMatch": {"proof_type": {"$exists": False}}}},
+        {"$set": {"settlement_proofs.$[elem].proof_type": "client"}},
+        array_filters=[{"elem.proof_type": {"$exists": False}}]
+    )
 
 @api_router.get("/")
 async def root():
