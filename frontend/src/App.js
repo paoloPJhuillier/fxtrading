@@ -10,6 +10,7 @@ const pageImports = {
   Dashboard: () => import('@/pages/DashboardPage'),
   Deals: () => import('@/pages/DealsPage'),
   NewDeal: () => import('@/pages/NewDealPage'),
+  EditDeal: () => import('@/pages/EditDealPage'),
   Treasury: () => import('@/pages/TreasuryPage'),
   ReferenceData: () => import('@/pages/ReferenceDataPage'),
   Users: () => import('@/pages/UsersPage'),
@@ -20,6 +21,7 @@ const pageImports = {
 const DashboardPage = lazy(pageImports.Dashboard);
 const DealsPage = lazy(pageImports.Deals);
 const NewDealPage = lazy(pageImports.NewDeal);
+const EditDealPage = lazy(pageImports.EditDeal);
 const TreasuryPage = lazy(pageImports.Treasury);
 const ReferenceDataPage = lazy(pageImports.ReferenceData);
 const UsersPage = lazy(pageImports.Users);
@@ -86,6 +88,7 @@ function AppRoutes() {
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/deals" element={<DealsPage />} />
           <Route path="/deals/new" element={<NewDealPage />} />
+          <Route path="/deals/:id/edit" element={<EditDealPage />} />
           <Route path="/treasury" element={<TreasuryPage />} />
           <Route path="/reference-data" element={<ReferenceDataPage />} />
           <Route path="/users" element={<UsersPage />} />

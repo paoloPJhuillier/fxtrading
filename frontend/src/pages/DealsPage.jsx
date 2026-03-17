@@ -4,14 +4,13 @@ import api from '@/lib/api';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Separator } from '@/components/ui/separator';
-import { Plus, FileText, Eye, Filter, X, Ban, Image as ImageIcon, Download, Upload, Trash2, RotateCcw, ChevronLeft, ChevronRight, Clock, Pencil, Save } from 'lucide-react';
+import { Plus, FileText, Eye, Filter, X, Ban, Image as ImageIcon, Download, Upload, Trash2, RotateCcw, ChevronLeft, ChevronRight, Clock, Pencil } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 
@@ -40,9 +39,6 @@ export default function DealsPage() {
   const [cancelling, setCancelling] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [resubmitting, setResubmitting] = useState(false);
-  const [editing, setEditing] = useState(false);
-  const [editForm, setEditForm] = useState({});
-  const [saving, setSaving] = useState(false);
   const clientFileRef = useRef(null);
   const processorFileRef = useRef(null);
   const navigate = useNavigate();
@@ -143,81 +139,13 @@ export default function DealsPage() {
     try {
       await api.put(`/deals/${sel.id}/resubmit`);
       toast.success('Deal resubmitted for review');
-      _setSel(null); setEditing(false); fetchDeals();
+      _setSel(null); fetchDeals();
     } catch (err) { toast.error(err.response?.data?.detail || 'Resubmit failed'); }
     finally { setResubmitting(false); }
   };
 
-  const startEdit = () => {
-    if (!sel) return;
-    setEditForm({
-      client_name: sel.client_name || '',
-      transaction_type: sel.transaction_type || '',
-      transfer_type: sel.transfer_type || '',
-      buy_currency: sel.buy_currency || '',
-      sell_currency: sel.sell_currency || '',
-      currency_amount: sel.currency_amount?.toString() || '',
-      rate: sel.rate?.toString() || '',
-      amount: sel.amount?.toString() || '',
-      from_bank: sel.from_bank || '',
-      from_account_num: sel.from_account_num || '',
-      to_bank: sel.to_bank || '',
-      to_account_num: sel.to_account_num || '',
-      ours_bank: sel.ours_bank || '',
-      ours_account_num: sel.ours_account_num || '',
-      remarks: sel.remarks || '',
-    });
-    setEditing(true);
-  };
-
-  const cancelEdit = () => { setEditing(false); setEditForm({}); };
-
-  const updateEditField = (k, v) => {
-    setEditForm(p => {
-      const next = { ...p, [k]: v };
-      if (k === 'currency_amount' || k === 'rate') {
-        const ca = parseFloat(k === 'currency_amount' ? v : next.currency_amount) || 0;
-        const r = parseFloat(k === 'rate' ? v : next.rate) || 0;
-        next.amount = (ca > 0 && r > 0) ? (ca * r).toFixed(2) : '';
-      }
-      return next;
-    });
-  };
-
-  const saveEdit = async () => {
-    if (!sel) return;
-    setSaving(true);
-    try {
-      const payload = {};
-      if (editForm.client_name !== sel.client_name) payload.client_name = editForm.client_name;
-      if (editForm.transaction_type !== sel.transaction_type) payload.transaction_type = editForm.transaction_type;
-      if (editForm.transfer_type !== sel.transfer_type) payload.transfer_type = editForm.transfer_type;
-      if (editForm.buy_currency !== sel.buy_currency) payload.buy_currency = editForm.buy_currency;
-      if (editForm.sell_currency !== sel.sell_currency) payload.sell_currency = editForm.sell_currency;
-      if (parseFloat(editForm.currency_amount) !== sel.currency_amount) payload.currency_amount = parseFloat(editForm.currency_amount) || 0;
-      if (parseFloat(editForm.rate) !== sel.rate) payload.rate = parseFloat(editForm.rate) || 0;
-      if (parseFloat(editForm.amount) !== sel.amount) payload.amount = parseFloat(editForm.amount) || 0;
-      if (editForm.from_bank !== (sel.from_bank || '')) payload.from_bank = editForm.from_bank;
-      if (editForm.from_account_num !== (sel.from_account_num || '')) payload.from_account_num = editForm.from_account_num;
-      if (editForm.to_bank !== (sel.to_bank || '')) payload.to_bank = editForm.to_bank;
-      if (editForm.to_account_num !== (sel.to_account_num || '')) payload.to_account_num = editForm.to_account_num;
-      if (editForm.ours_bank !== (sel.ours_bank || '')) payload.ours_bank = editForm.ours_bank;
-      if (editForm.ours_account_num !== (sel.ours_account_num || '')) payload.ours_account_num = editForm.ours_account_num;
-      if (editForm.remarks !== (sel.remarks || '')) payload.remarks = editForm.remarks;
-      if (Object.keys(payload).length === 0) { toast.info('No changes to save'); setSaving(false); return; }
-      const res = await api.put(`/deals/${sel.id}/edit`, payload);
-      _setSel(res.data);
-      setEditing(false);
-      toast.success('Deal updated successfully');
-      fetchDeals();
-    } catch (err) { toast.error(err.response?.data?.detail || 'Save failed'); }
-    finally { setSaving(false); }
-  };
-
   const viewDeal = useCallback(async (deal) => {
     _setSel(deal);
-    setEditing(false);
-    setEditForm({});
     try {
       const res = await api.get(`/deals/${deal.id}`);
       _setSel(res.data);
@@ -328,20 +256,12 @@ export default function DealsPage() {
               <div className="flex items-center justify-between">
                 <Badge className={SB[sel.status] + ' text-xs'}>{sel.status}</Badge>
                 <div className="flex gap-2">
-                  {sel.status === 'returned' && !editing && (
-                    <Button size="sm" variant="outline" className="gap-1.5" onClick={startEdit} data-testid="edit-deal-btn">
-                      <Pencil className="h-3.5 w-3.5" /> Edit
+                  {sel.status === 'returned' && (
+                    <Button size="sm" variant="outline" className="gap-1.5" onClick={() => { _setSel(null); navigate(`/deals/${sel.id}/edit`); }} data-testid="edit-deal-btn">
+                      <Pencil className="h-3.5 w-3.5" /> Edit Deal
                     </Button>
                   )}
-                  {sel.status === 'returned' && editing && (
-                    <>
-                      <Button size="sm" variant="ghost" onClick={cancelEdit} data-testid="cancel-edit-btn">Cancel</Button>
-                      <Button size="sm" className="bg-[#08263e] hover:bg-[#08263e]/90 gap-1.5" onClick={saveEdit} disabled={saving} data-testid="save-edit-btn">
-                        <Save className="h-3.5 w-3.5" /> {saving ? 'Saving...' : 'Save Changes'}
-                      </Button>
-                    </>
-                  )}
-                  {sel.status === 'returned' && !editing && (
+                  {sel.status === 'returned' && (
                     <Button size="sm" className="bg-[#518dca] hover:bg-[#518dca]/90 text-white" onClick={handleResubmit} disabled={resubmitting} data-testid="resubmit-deal-btn">
                       <RotateCcw className="h-3.5 w-3.5 mr-1.5" /> {resubmitting ? 'Resubmitting...' : 'Resubmit'}
                     </Button>
@@ -357,44 +277,10 @@ export default function DealsPage() {
                 <div className="bg-red-50 border border-red-300 p-4 rounded-md" data-testid="returned-alert">
                   <p className="text-xs font-semibold text-red-700 uppercase tracking-wider mb-1">Deal Returned by Treasury</p>
                   <p className="text-sm text-red-800">{sel.treasury_remarks}</p>
-                  {!editing && <p className="text-[10px] text-red-500 mt-2">Click Edit to modify the deal, then Resubmit when ready.</p>}
+                  <p className="text-[10px] text-red-500 mt-2">Click "Edit Deal" to modify, or "Resubmit" to send as-is.</p>
                 </div>
               )}
 
-              {editing ? (
-                /* ---- EDIT MODE ---- */
-                <div className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <EF label="Client Name" value={editForm.client_name} onChange={v => updateEditField('client_name', v)} tid="edit-client" />
-                    <EF label="Transaction Type" value={editForm.transaction_type} onChange={v => updateEditField('transaction_type', v)} tid="edit-tx-type" />
-                    <EF label="Transfer Type" value={editForm.transfer_type} onChange={v => updateEditField('transfer_type', v)} tid="edit-tf-type" />
-                    <EF label="Buy Currency" value={editForm.buy_currency} onChange={v => updateEditField('buy_currency', v)} tid="edit-buy-curr" />
-                    <EF label="Sell Currency" value={editForm.sell_currency} onChange={v => updateEditField('sell_currency', v)} tid="edit-sell-curr" />
-                    <EF label="Currency Amount" value={editForm.currency_amount} onChange={v => updateEditField('currency_amount', v)} tid="edit-curr-amt" type="number" />
-                    <EF label="Exchange Rate" value={editForm.rate} onChange={v => updateEditField('rate', v)} tid="edit-rate" type="number" />
-                    <div className="space-y-1"><Label className="text-xs">Converted Amount</Label><Input value={editForm.amount} readOnly className="h-8 text-xs bg-slate-50 font-mono" data-testid="edit-amount" /></div>
-                  </div>
-                  <Separator />
-                  <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Source (From)</p>
-                  <div className="grid grid-cols-2 gap-4">
-                    <EF label="From Bank" value={editForm.from_bank} onChange={v => updateEditField('from_bank', v)} tid="edit-from-bank" />
-                    <EF label="From Account" value={editForm.from_account_num} onChange={v => updateEditField('from_account_num', v)} tid="edit-from-acct" />
-                  </div>
-                  <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Destination (To)</p>
-                  <div className="grid grid-cols-2 gap-4">
-                    <EF label="To Bank" value={editForm.to_bank} onChange={v => updateEditField('to_bank', v)} tid="edit-to-bank" />
-                    <EF label="To Account" value={editForm.to_account_num} onChange={v => updateEditField('to_account_num', v)} tid="edit-to-acct" />
-                  </div>
-                  <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider bg-yellow-50 p-1.5 rounded">Ours (Receiving Account)</p>
-                  <div className="grid grid-cols-2 gap-4">
-                    <EF label="Ours Bank" value={editForm.ours_bank} onChange={v => updateEditField('ours_bank', v)} tid="edit-ours-bank" />
-                    <EF label="Ours Account" value={editForm.ours_account_num} onChange={v => updateEditField('ours_account_num', v)} tid="edit-ours-acct" />
-                  </div>
-                  <div className="space-y-1"><Label className="text-xs">Remarks</Label><Textarea value={editForm.remarks} onChange={e => updateEditField('remarks', e.target.value)} rows={2} className="text-xs" data-testid="edit-remarks" /></div>
-                </div>
-              ) : (
-                /* ---- VIEW MODE ---- */
-                <>
               <div className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
                 <DI label="Client" val={sel.client_name} />
                 <DI label="Transaction Type" val={sel.transaction_type} />
@@ -418,8 +304,6 @@ export default function DealsPage() {
               {sel.remarks && (<div className="bg-slate-50 p-3 rounded-md"><p className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Remarks</p><p className="text-sm">{sel.remarks}</p></div>)}
               {sel.status !== 'returned' && sel.treasury_remarks && (<div className="bg-blue-50 p-3 rounded-md"><p className="text-[10px] text-blue-400 uppercase tracking-wider mb-1">Treasury Remarks</p><p className="text-sm">{sel.treasury_remarks}</p></div>)}
               {sel.cancellation_reason && (<div className="bg-red-50 border border-red-200 p-3 rounded-md"><p className="text-[10px] text-red-400 uppercase tracking-wider mb-1">Cancellation Reason</p><p className="text-sm text-red-700">{sel.cancellation_reason}</p></div>)}
-                </>
-              )}
               <Separator />
               {/* Client's Settlement Proofs */}
               <div>
@@ -533,15 +417,6 @@ export default function DealsPage() {
 
 function DI({ label, val, mono }) {
   return (<div><p className="text-[10px] text-slate-400 uppercase tracking-wider">{label}</p><p className={`text-sm font-medium ${mono ? 'font-mono' : ''}`}>{val || '-'}</p></div>);
-}
-
-function EF({ label, value, onChange, tid, type = 'text' }) {
-  return (
-    <div className="space-y-1">
-      <Label className="text-xs">{label}</Label>
-      <Input type={type} step={type === 'number' ? '0.000001' : undefined} value={value} onChange={e => onChange(e.target.value)} className="h-8 text-xs" data-testid={tid} />
-    </div>
-  );
 }
 
 function AcctInfo({ deal, prefix, label }) {
