@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useEffect } from 'react';
+import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import api from '@/lib/api';
 import { useRefData } from '@/lib/refdata';
@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { ArrowLeft, RotateCcw } from 'lucide-react';
+import { ArrowLeft, RotateCcw, Upload, Eye, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 import { VField, TypeToggle, DatePick, SearchSelect, CurrSel, BankAccountSelect } from '@/components/DealFormFields';
@@ -21,6 +21,9 @@ export default function EditDealPage() {
   const [saving, setSaving] = useState(false);
   const [resubmitting, setResubmitting] = useState(false);
   const [errors, setErrors] = useState({});
+  const [uploading, setUploading] = useState(false);
+  const clientFileRef = useRef(null);
+  const processorFileRef = useRef(null);
   const { data: ref } = useRefData();
   const safeRef = ref || { companies: [], banks: [], txTypes: [], tfTypes: [], currencies: [] };
 
@@ -97,6 +100,36 @@ export default function EditDealPage() {
   const fiat = useMemo(() => safeRef.currencies.filter(c => c.type === 'fiat'), [safeRef.currencies]);
   const stablecoin = useMemo(() => safeRef.currencies.filter(c => c.type === 'stablecoin'), [safeRef.currencies]);
   const crypto = useMemo(() => safeRef.currencies.filter(c => c.type === 'crypto'), [safeRef.currencies]);
+
+  const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
+
+  const uploadProof = async (e, proofType) => {
+    if (!e.target.files?.length) return;
+    setUploading(true);
+    try {
+      for (const file of e.target.files) {
+        const fd = new FormData();
+        fd.append('file', file);
+        await api.post(`/deals/${id}/upload?proof_type=${proofType}`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+      }
+      const res = await api.get(`/deals/${id}`);
+      setDeal(res.data);
+      toast.success(`${proofType === 'client' ? 'Client' : 'Processor'} proof uploaded`);
+    } catch (err) { toast.error(err.response?.data?.detail || 'Upload failed'); }
+    finally { setUploading(false); e.target.value = ''; }
+  };
+
+  const deleteProof = async (proofId) => {
+    try {
+      await api.delete(`/deals/${id}/proofs/${proofId}`);
+      const res = await api.get(`/deals/${id}`);
+      setDeal(res.data);
+      toast.success('Proof deleted');
+    } catch (err) { toast.error('Delete failed'); }
+  };
+
+  const clientProofs = deal?.settlement_proofs?.filter(p => p.proof_type !== 'processor') || [];
+  const processorProofs = deal?.settlement_proofs?.filter(p => p.proof_type === 'processor') || [];
 
   const buildPayload = () => {
     if (!deal || !f) return null;
@@ -297,6 +330,75 @@ export default function EditDealPage() {
           <VField label="Remarks (optional)">
             <Textarea name="remarks" value={f.remarks} onChange={onInput} placeholder="Additional notes..." rows={3} data-testid="edit-remarks-input" />
           </VField>
+        </CardContent>
+      </Card>
+
+      <Card className="mt-6">
+        <CardHeader>
+          <CardTitle className="text-base text-[#08263e]" style={{ fontFamily: 'Chivo' }}>Settlement Proofs</CardTitle>
+          <p className="text-xs text-slate-400 mt-1">View, upload or remove settlement proof documents</p>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          {/* Client's Settlement */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-xs font-medium text-slate-600 uppercase tracking-wider">Client's Settlement</p>
+              <div>
+                <input type="file" ref={clientFileRef} className="hidden" accept="image/*,.pdf" multiple onChange={e => uploadProof(e, 'client')} />
+                <Button type="button" size="sm" variant="outline" onClick={() => clientFileRef.current?.click()} disabled={uploading} data-testid="edit-upload-client-proof-btn">
+                  <Upload className="h-3 w-3 mr-1.5" /> {uploading ? 'Uploading...' : 'Upload'}
+                </Button>
+              </div>
+            </div>
+            {clientProofs.length > 0 ? (
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                {clientProofs.map(p => (
+                  <div key={p.id} className="relative group border rounded-lg overflow-hidden">
+                    <img src={`${BACKEND_URL}/api/files/${p.path}`} alt={p.filename} className="w-full h-28 object-cover" loading="lazy" decoding="async" />
+                    <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                      <a href={`${BACKEND_URL}/api/files/${p.path}`} target="_blank" rel="noopener noreferrer" className="text-white"><Eye className="h-4 w-4" /></a>
+                      <button type="button" onClick={() => deleteProof(p.id)} className="text-white hover:text-red-300"><Trash2 className="h-4 w-4" /></button>
+                    </div>
+                    <p className="text-[10px] text-slate-500 p-1.5 truncate">{p.filename}</p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-4 border border-dashed rounded-lg">
+                <p className="text-[10px] text-slate-400">No client settlement proofs</p>
+              </div>
+            )}
+          </div>
+          {/* Processor's Settlement */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-xs font-medium text-slate-600 uppercase tracking-wider">Processor's Settlement</p>
+              <div>
+                <input type="file" ref={processorFileRef} className="hidden" accept="image/*,.pdf" multiple onChange={e => uploadProof(e, 'processor')} />
+                <Button type="button" size="sm" variant="outline" onClick={() => processorFileRef.current?.click()} disabled={uploading} data-testid="edit-upload-processor-proof-btn">
+                  <Upload className="h-3 w-3 mr-1.5" /> {uploading ? 'Uploading...' : 'Upload'}
+                </Button>
+              </div>
+            </div>
+            {processorProofs.length > 0 ? (
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                {processorProofs.map(p => (
+                  <div key={p.id} className="relative group border rounded-lg overflow-hidden">
+                    <img src={`${BACKEND_URL}/api/files/${p.path}`} alt={p.filename} className="w-full h-28 object-cover" loading="lazy" decoding="async" />
+                    <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                      <a href={`${BACKEND_URL}/api/files/${p.path}`} target="_blank" rel="noopener noreferrer" className="text-white"><Eye className="h-4 w-4" /></a>
+                      <button type="button" onClick={() => deleteProof(p.id)} className="text-white hover:text-red-300"><Trash2 className="h-4 w-4" /></button>
+                    </div>
+                    <p className="text-[10px] text-slate-500 p-1.5 truncate">{p.filename}</p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-4 border border-dashed rounded-lg">
+                <p className="text-[10px] text-slate-400">No processor settlement proofs</p>
+              </div>
+            )}
+          </div>
         </CardContent>
       </Card>
 
