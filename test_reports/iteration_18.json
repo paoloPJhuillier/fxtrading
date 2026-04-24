@@ -1,0 +1,62 @@
+{
+  "summary": "Validated the new switchable storage abstraction layer (STORAGE_TYPE=emergent active). 14/14 pytest tests passed covering login for all 3 roles, deal creation, client/processor proof uploads via EmergentStorage, file download, deal detail with proofs, proof delete, and admin-only /api/storage/status (returns backend=emergent, class=EmergentStorage; 403 for trader/treasury). Frontend smoke test also passed: trader login → dashboard (Welcome toast), My Deals page loads with created test deal, New Deal nav button visible, zero console errors.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "passed_tests": [
+    "POST /api/auth/login — trader/treasury/admin all return 200 with token + correct role",
+    "GET /api/storage/status (admin) — returns {backend: 'emergent', class: 'EmergentStorage'}",
+    "GET /api/storage/status (trader) — 403",
+    "GET /api/storage/status (treasury) — 403",
+    "POST /api/deals — trader creates deal, status=pending, reference_number generated",
+    "GET /api/deals — created deal appears in list",
+    "GET /api/deals/{id} — returns deal with settlement_proofs[] and history[]",
+    "POST /api/deals/{id}/upload?proof_type=client — PNG upload returns {id, path, filename, content_type, proof_type}; path is prefixed app-name/deals/{deal_id}/{uuid}.png",
+    "POST /api/deals/{id}/upload?proof_type=processor — also succeeds",
+    "POST /api/deals/{id}/upload?proof_type=invalid — rejected (422)",
+    "GET /api/files/{path} — 200, Content-Type image/png, bytes returned",
+    "GET /api/deals/{id} after upload — settlement_proofs contains uploaded proof",
+    "DELETE /api/deals/{id}/proofs/{proof_id} — 200, proof removed from deal",
+    "Frontend: trader login redirects to /dashboard, Welcome back toast shown",
+    "Frontend: /deals page loads 56 deals, test deal FX-20260424-0001 at top",
+    "Frontend: No console errors on dashboard or deals pages"
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_storage_abstraction.py",
+    "/app/test_reports/pytest/storage_abstraction_tests.xml"
+  ],
+  "action_items": [
+    "S3Storage path was NOT exercised end-to-end (no real S3 creds). Code structure looks correct (boto3 path-style, s3v4, content-type forwarded). Before flipping STORAGE_TYPE=s3 in prod, validate with real Huawei OBS creds. Also recommend adding a try/except around put_object in S3Storage to return a meaningful HTTPException like EmergentStorage path.",
+    "Minor: server.py uses `from services.storage import get_storage` which relies on CWD=/app/backend when uvicorn starts. Works today via supervisor but consider making it a package-relative import (`from .services.storage import get_storage`) for robustness.",
+    "Minor: S3Storage.__init__ raises KeyError (not HTTPException) if S3_BUCKET_NAME/S3_ACCESS_KEY_ID/S3_SECRET_ACCESS_KEY missing. Since it's a singleton init on first request, this will surface as a 500. Consider validating env on app startup when STORAGE_TYPE=s3."
+  ],
+  "critical_code_review_comments": [
+    "services/storage.py: ABC interface is clean, factory singleton pattern correct",
+    "server.py L458: proof_type regex `^(client|processor)$` properly validates the query param — rejected 'invalid' with 422 as expected",
+    "server.py L471,498: Upload/delete correctly use `get_storage()` through the abstraction — no direct Emergent calls leaked in",
+    "server.py L484: GET /api/files/{path:path} is unauthenticated — acceptable for this app (proof paths contain UUIDs making enumeration hard) but worth documenting. S3 path would also be public via this endpoint, not pre-signed URLs.",
+    "S3Storage.delete_object swallows exceptions (logs warning) — parity with Emergent behavior, good choice for idempotent deletes"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_storage_abstraction.py (new)"
+  ],
+  "success_rate": {
+    "backend": "100% (14/14 pytest)",
+    "frontend": "100% (smoke flow — login, dashboard, deals list, navigation)"
+  },
+  "test_credentials": {
+    "trader": "trader@fxtracker.com / Trader@123",
+    "treasury": "treasury@fxtracker.com / Treasury@123",
+    "admin": "admin@fxtracker.com / Admin@123"
+  },
+  "seed_data_creation": "Created deal FX-20260424-0001 (TEST_Storage Client, USD/EUR 920 @ 0.92) and uploaded/deleted PNG proofs during testing. Processor proof remains on the deal (not cleaned up).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Storage abstraction (services/storage.py) is production-ready for the Emergent backend. S3/Huawei OBS path is code-only — requires real creds + bucket to validate. If main agent flips STORAGE_TYPE=s3 later, rerun /app/backend/tests/test_storage_abstraction.py (the endpoints are backend-agnostic; only storage_status response would show backend='s3'). Test deal FX-20260424-0001 now exists with one processor proof."
+}

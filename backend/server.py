@@ -10,7 +10,6 @@ import logging
 import uuid
 import csv
 import io
-import requests as http_requests
 from pathlib import Path
 from pydantic import BaseModel
 from typing import List, Optional
@@ -38,39 +37,10 @@ api_router = APIRouter(prefix="/api")
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# --- Object Storage ---
-STORAGE_URL = "https://integrations.emergentagent.com/objstore/api/v1/storage"
-EMERGENT_KEY = os.environ.get("EMERGENT_LLM_KEY")
+# --- Object Storage (switchable via STORAGE_TYPE env var) ---
+from services.storage import get_storage
+
 APP_NAME = os.environ.get("APP_NAME", "fx-trading-tracker")
-storage_key = None
-
-def init_storage():
-    global storage_key
-    if storage_key:
-        return storage_key
-    resp = http_requests.post(f"{STORAGE_URL}/init", json={"emergent_key": EMERGENT_KEY}, timeout=30)
-    resp.raise_for_status()
-    storage_key = resp.json()["storage_key"]
-    return storage_key
-
-def put_object(path: str, data: bytes, content_type: str) -> dict:
-    key = init_storage()
-    resp = http_requests.put(
-        f"{STORAGE_URL}/objects/{path}",
-        headers={"X-Storage-Key": key, "Content-Type": content_type},
-        data=data, timeout=120
-    )
-    resp.raise_for_status()
-    return resp.json()
-
-def get_object(path: str):
-    key = init_storage()
-    resp = http_requests.get(
-        f"{STORAGE_URL}/objects/{path}",
-        headers={"X-Storage-Key": key}, timeout=60
-    )
-    resp.raise_for_status()
-    return resp.content, resp.headers.get("Content-Type", "application/octet-stream")
 
 
 # --- Pydantic Models ---
@@ -498,7 +468,7 @@ async def upload_settlement_proof(deal_id: str, file: UploadFile = File(...), pr
     ext = file.filename.split(".")[-1] if "." in file.filename else "jpg"
     path = f"{APP_NAME}/deals/{deal_id}/{uuid.uuid4().hex}.{ext}"
     try:
-        put_object(path, data, file.content_type)
+        get_storage().put_object(path, data, file.content_type)
     except Exception as e:
         logger.error(f"Upload failed: {e}")
         raise HTTPException(status_code=500, detail="Upload failed")
@@ -511,7 +481,7 @@ async def upload_settlement_proof(deal_id: str, file: UploadFile = File(...), pr
 @api_router.get("/files/{path:path}")
 async def get_file(path: str):
     try:
-        data, ct = get_object(path)
+        data, ct = get_storage().get_object(path)
         return Response(content=data, media_type=ct)
     except Exception as e:
         logger.error(f"File fetch failed: {e}")
@@ -520,8 +490,14 @@ async def get_file(path: str):
 @api_router.delete("/deals/{deal_id}/proofs/{proof_id}")
 async def delete_settlement_proof(deal_id: str, proof_id: str, user=Depends(get_current_user)):
     deal = await db.deals.find_one({"id": deal_id}, {"_id": 0})
+    if not deal:
+        raise HTTPException(status_code=404, detail="Deal not found")
+    # Find the proof to get its storage path before removing
+    proof_to_delete = next((p for p in deal.get("settlement_proofs", []) if p["id"] == proof_id), None)
+    if proof_to_delete and proof_to_delete.get("path"):
+        get_storage().delete_object(proof_to_delete["path"])
     await db.deals.update_one({"id": deal_id}, {"$pull": {"settlement_proofs": {"id": proof_id}}})
-    await log_audit("proof_deleted", user, "deal", deal_id, deal.get("reference_number", "") if deal else "", f"Deleted settlement proof")
+    await log_audit("proof_deleted", user, "deal", deal_id, deal.get("reference_number", ""), f"Deleted settlement proof")
     return {"message": "Proof deleted"}
 
 @api_router.put("/deals/{deal_id}/process")
@@ -962,6 +938,18 @@ async def startup():
 @api_router.get("/")
 async def root():
     return {"message": "FX Trading Tracker API"}
+
+@api_router.get("/storage/status")
+async def storage_status(user=Depends(get_current_user)):
+    await require_role(user, ["admin"])
+    storage = get_storage()
+    backend_type = os.environ.get("STORAGE_TYPE", "emergent").lower()
+    info = {"backend": backend_type, "class": type(storage).__name__}
+    if backend_type == "s3":
+        info["endpoint"] = os.environ.get("S3_ENDPOINT_URL", "default")
+        info["bucket"] = os.environ.get("S3_BUCKET_NAME", "")
+        info["region"] = os.environ.get("S3_REGION", "")
+    return info
 
 app.include_router(api_router)
 
