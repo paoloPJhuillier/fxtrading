@@ -148,6 +148,9 @@ def get_storage() -> StorageBackend:
     storage_type = os.environ.get("STORAGE_TYPE", "emergent").lower()
 
     if storage_type == "s3":
+        missing = [v for v in ("S3_BUCKET_NAME", "S3_ACCESS_KEY_ID", "S3_SECRET_ACCESS_KEY") if not os.environ.get(v)]
+        if missing:
+            raise RuntimeError(f"STORAGE_TYPE=s3 but missing required env vars: {', '.join(missing)}")
         _instance = S3Storage()
     else:
         _instance = EmergentStorage()
