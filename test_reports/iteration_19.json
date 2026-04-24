@@ -1,0 +1,70 @@
+{
+  "summary": "Validated the switchable DB abstraction layer with DB_TYPE=mongodb active. 21/21 pytest cases passed covering auth (3 roles), /api/database/status (admin returns backend=mongodb/class=MongoDatabase, 403 for trader & treasury), /api/storage/status RBAC, reference data (currencies, banks), deal CRUD with pagination, deal detail (history + settlement_proofs), client-proof upload ($push), proof delete ($pull), treasury return/confirm, trader edit + resubmit, dashboard aggregation (?range=30d), admin users list, admin audit-logs, and RBAC 403s. Frontend smoke also passed: trader login → dashboard (Welcome back toast) → /deals (59 deals loaded incl. TEST_DBAbstraction Client FX-20260424-0004 confirmed) → /deals/new (full form renders — Client Name, Transaction Type, Transfer Type, Deal/Value dates, Buy/Sell Currency, amounts, Source/Destination/Ours sections). Zero JS console errors.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "passed_tests": [
+    "POST /api/auth/login — trader/treasury/admin all 200 + correct role",
+    "GET /api/database/status (admin) — {backend: 'mongodb', class: 'MongoDatabase'}",
+    "GET /api/database/status (trader) — 403",
+    "GET /api/database/status (treasury) — 403",
+    "GET /api/storage/status (admin) — 200 {backend, class}; (trader) — 403",
+    "GET /api/reference/currencies — list, no _id leak",
+    "GET /api/reference/banks — list",
+    "POST /api/deals — status=pending, reference_number FX-YYYYMMDD-NNNN, settlement_proofs=[]",
+    "GET /api/deals?page=1&limit=20 — pagination envelope {deals, page, pages, total} correct",
+    "GET /api/deals/{id} — history[] has 'created' action; settlement_proofs[] present",
+    "POST /api/deals/{id}/upload?proof_type=client — PNG 200, proof pushed to array",
+    "GET /api/deals/{id} after upload — $push persisted",
+    "DELETE /api/deals/{id}/proofs/{proof_id} — $pull persisted",
+    "PUT /api/deals/{id}/process returned — status=returned, treasury_remarks saved",
+    "PUT /api/deals/{id}/edit — only works on returned deal; fields updated; changes recorded",
+    "PUT /api/deals/{id}/resubmit — status back to pending",
+    "PUT /api/deals/{id}/process confirmed — status=confirmed, processed_by set",
+    "GET /api/deals/{id} final — history contains created/returned/resubmitted/confirmed",
+    "GET /api/dashboard/stats?range=30d — returns aggregation dict",
+    "GET /api/users (admin) — list of ≥3 users, no _id",
+    "GET /api/users (trader) — 403",
+    "GET /api/audit-logs (admin) — logs list present",
+    "GET /api/audit-logs (trader) — 403",
+    "Frontend: login → /dashboard, Welcome back toast",
+    "Frontend: /deals loads 59 deals incl. TEST_DBAbstraction Client",
+    "Frontend: /deals/new renders full form (inputs=9, buttons=25, all key labels present)",
+    "Frontend: zero pageerror events"
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_database_abstraction.py",
+    "/app/test_reports/pytest/database_abstraction.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "services/database.py: factory singleton is correct; SCOPE_MAP is clean and gives Couchbase path the right scope/collection mapping.",
+    "services/db_mongo.py: thin proxy over motor; find_one_and_update correctly translates boolean return_document to pymongo.ReturnDocument.AFTER/BEFORE — good.",
+    "MongoCursor.__anext__ uses await self._cursor.fetch_next which is deprecated in newer motor versions; consider `async for` on cursor directly or using `next()` coroutine. Works today but could break on motor upgrade.",
+    "services/database.py get_database is async but MongoDatabase.create() is sync — fine, but get_database() has no lock around `_instance = ...`; under concurrent first-access could create two instances. Low risk since called once in startup.",
+    "server.py references module-level `db` (imported/bound in startup) — the `@api_router.get('/database/status')` handler uses type(db).__name__ which works because `db` is module-global set during startup. Confirmed in test (returns 'MongoDatabase').",
+    "Pagination responses are inconsistent: /api/deals returns {deals,...}, /api/users returns {users,...}, /api/audit-logs returns {logs,...}. Recommend standardising to {items, total, page, pages} for predictability in clients."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_database_abstraction.py (new, 21 tests)"
+  ],
+  "success_rate": {
+    "backend": "100% (21/21 pytest)",
+    "frontend": "100% (login + dashboard + deals list + new-deal form render)"
+  },
+  "test_credentials": {
+    "trader": "trader@fxtracker.com / Trader@123",
+    "treasury": "treasury@fxtracker.com / Treasury@123",
+    "admin": "admin@fxtracker.com / Admin@123"
+  },
+  "seed_data_creation": "Created deal FX-20260424-0003 and FX-20260424-0004 (TEST_DBAbstraction Client, USD/EUR 925 @ 0.92, both confirmed after return→edit→resubmit→confirm flow). Uploaded + deleted one client proof. No manual cleanup performed.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "DB abstraction (services/database.py, services/db_mongo.py, services/db_couchbase.py) is solid on the MongoDB path. If DB_TYPE is flipped to 'couchbase', rerun /app/backend/tests/test_database_abstraction.py — response shapes and endpoint behaviour are identical; only /api/database/status should return {backend:'couchbase', class:'CouchbaseDatabase', scopes:[...]}. Two TEST_DBAbstraction confirmed deals remain in the DB."
+}

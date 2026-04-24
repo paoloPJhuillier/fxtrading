@@ -3,8 +3,6 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.responses import Response, StreamingResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
-from motor.motor_asyncio import AsyncIOMotorClient
-from pymongo import ReturnDocument
 import os
 import logging
 import uuid
@@ -20,9 +18,8 @@ from passlib.context import CryptContext
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
-mongo_url = os.environ['MONGO_URL']
-client = AsyncIOMotorClient(mongo_url)
-db = client[os.environ['DB_NAME']]
+# Database is initialized asynchronously in startup event
+db = None
 
 JWT_SECRET = os.environ.get('JWT_SECRET')
 JWT_ALGORITHM = "HS256"
@@ -39,6 +36,8 @@ logger = logging.getLogger(__name__)
 
 # --- Object Storage (switchable via STORAGE_TYPE env var) ---
 from services.storage import get_storage
+# --- Database (switchable via DB_TYPE env var: mongodb | couchbase) ---
+from services.database import get_database
 
 APP_NAME = os.environ.get("APP_NAME", "fx-trading-tracker")
 
@@ -202,7 +201,7 @@ async def generate_deal_reference():
         {"name": "deal_ref", "date": today},
         {"$inc": {"seq": 1}},
         upsert=True,
-        return_document=ReturnDocument.AFTER
+        return_document=True
     )
     return f"FX-{today}-{counter['seq']:04d}"
 
@@ -925,6 +924,9 @@ async def seed_data():
 
 @app.on_event("startup")
 async def startup():
+    global db
+    db = await get_database()
+    logger.info("Database backend: %s", type(db).__name__)
     await seed_data()
     # Backfill: Add empty history array to old deals
     await db.deals.update_many({"history": {"$exists": False}}, {"$set": {"history": []}})
@@ -951,6 +953,18 @@ async def storage_status(user=Depends(get_current_user)):
         info["region"] = os.environ.get("S3_REGION", "")
     return info
 
+@api_router.get("/database/status")
+async def database_status(user=Depends(get_current_user)):
+    await require_role(user, ["admin"])
+    db_type = os.environ.get("DB_TYPE", "mongodb").lower()
+    info = {"backend": db_type, "class": type(db).__name__}
+    if db_type == "couchbase":
+        info["connection"] = os.environ.get("CB_CONNECTION_STRING", "")
+        info["bucket"] = os.environ.get("CB_BUCKET_NAME", "")
+        from services.database import SCOPE_MAP
+        info["scopes"] = sorted(set(s for s, _ in SCOPE_MAP.values()))
+    return info
+
 app.include_router(api_router)
 
 app.add_middleware(
@@ -963,4 +977,4 @@ app.add_middleware(
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
-    client.close()
+    pass  # Connection cleanup handled by database backend
