@@ -1,94 +1,256 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useAuth } from '@/lib/auth';
 import api from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { FileText, Download, FileSpreadsheet, Loader2, Shield, BarChart3, Users, Clock, TrendingUp, Briefcase } from 'lucide-react';
+import {
+  FileText, Download, FileSpreadsheet, Loader2, Shield, BarChart3,
+  Users, Clock, TrendingUp, Briefcase, ChevronLeft, Search, ArrowUpDown
+} from 'lucide-react';
 import { toast } from 'sonner';
 
-const REPORTS = [
-  {
-    id: 'deal-blotter',
+// ── Report definitions ──────────────────────────────────────────────────────
+
+const REPORTS = {
+  'deal-blotter': {
     title: 'Deal Blotter',
-    desc: 'Complete log of all executed deals with full details',
+    desc: 'Complete log of all deals with full details',
     icon: FileText,
     color: '#08263e',
     roles: ['trader', 'treasury', 'admin'],
     filters: ['dateRange', 'status', 'client', 'currency'],
+    columns: [
+      { key: 'reference_number', label: 'Ref#', w: 'w-[100px]' },
+      { key: 'deal_date', label: 'Deal Date', w: 'w-[90px]' },
+      { key: 'value_date', label: 'Value Date', w: 'w-[90px]' },
+      { key: 'client_name', label: 'Client' },
+      { key: 'transaction_type', label: 'Type', w: 'w-[60px]' },
+      { key: 'buy_currency', label: 'Buy', w: 'w-[50px]' },
+      { key: 'sell_currency', label: 'Sell', w: 'w-[50px]' },
+      { key: 'currency_amount', label: 'CCY Amt', w: 'w-[90px]', numeric: true },
+      { key: 'rate', label: 'Rate', w: 'w-[70px]', numeric: true, decimals: 4 },
+      { key: 'amount', label: 'Settle Amt', w: 'w-[100px]', numeric: true },
+      { key: 'status', label: 'Status', w: 'w-[80px]' },
+      { key: 'created_by_name', label: 'Trader', w: 'w-[100px]' },
+    ],
   },
-  {
-    id: 'settlement',
+  'settlement': {
     title: 'Settlement Report',
-    desc: 'Deals grouped by value date with bank details and proof status',
+    desc: 'Deals by value date with bank details and proof status',
     icon: Clock,
     color: '#ec474e',
     roles: ['trader', 'treasury', 'admin'],
     filters: ['dateRange'],
+    columns: [
+      { key: 'value_date', label: 'Value Date', w: 'w-[90px]' },
+      { key: 'reference_number', label: 'Ref#', w: 'w-[100px]' },
+      { key: 'client_name', label: 'Client' },
+      { key: 'buy_currency', label: 'Buy', w: 'w-[50px]' },
+      { key: 'sell_currency', label: 'Sell', w: 'w-[50px]' },
+      { key: 'currency_amount', label: 'CCY Amt', w: 'w-[90px]', numeric: true },
+      { key: 'amount', label: 'Settle Amt', w: 'w-[100px]', numeric: true },
+      { key: 'from_bank', label: 'From Bank', w: 'w-[90px]' },
+      { key: 'to_bank', label: 'To Bank', w: 'w-[90px]' },
+      { key: 'proofs', label: 'Proofs', w: 'w-[50px]', numeric: true },
+      { key: 'status', label: 'Status', w: 'w-[80px]' },
+    ],
   },
-  {
-    id: 'open-positions',
+  'open-positions': {
     title: 'Open Positions',
-    desc: 'Pending deals grouped by currency pair showing net exposure',
+    desc: 'Pending deals by currency pair showing net exposure',
     icon: TrendingUp,
     color: '#518dca',
     roles: ['trader', 'treasury', 'admin'],
     filters: [],
+    columns: [
+      { key: 'pair', label: 'Currency Pair', w: 'w-[120px]' },
+      { key: 'count', label: '# Deals', w: 'w-[80px]', numeric: true },
+      { key: 'buy_total', label: 'Total Buy', numeric: true },
+      { key: 'sell_total', label: 'Total Sell', numeric: true },
+      { key: 'net', label: 'Net Position', numeric: true },
+    ],
   },
-  {
-    id: 'audit-trail',
+  'audit-trail': {
     title: 'Transaction Audit Trail',
-    desc: 'Full history of every deal action with timestamps and change logs',
+    desc: 'Full history of every deal action with timestamps',
     icon: Shield,
     color: '#08263e',
     roles: ['admin'],
     filters: ['dateRange'],
+    columns: [
+      { key: 'timestamp', label: 'Timestamp', w: 'w-[140px]' },
+      { key: 'action', label: 'Action', w: 'w-[110px]' },
+      { key: 'entity_type', label: 'Entity', w: 'w-[70px]' },
+      { key: 'entity_ref', label: 'Reference', w: 'w-[110px]' },
+      { key: 'user_name', label: 'User', w: 'w-[100px]' },
+      { key: 'user_role', label: 'Role', w: 'w-[70px]' },
+      { key: 'details', label: 'Details' },
+    ],
   },
-  {
-    id: 'user-activity',
+  'user-activity': {
     title: 'User Activity',
-    desc: 'Actions per user: deals created, processed, returned, proofs uploaded',
+    desc: 'Actions per user over a period',
     icon: Users,
     color: '#ec474e',
     roles: ['admin'],
     filters: ['dateRange'],
+    columns: [
+      { key: 'user_name', label: 'User' },
+      { key: 'role', label: 'Role', w: 'w-[80px]' },
+      { key: 'created', label: 'Created', w: 'w-[70px]', numeric: true },
+      { key: 'processed', label: 'Processed', w: 'w-[80px]', numeric: true },
+      { key: 'returned', label: 'Returned', w: 'w-[70px]', numeric: true },
+      { key: 'proofs', label: 'Proofs', w: 'w-[70px]', numeric: true },
+      { key: 'total', label: 'Total', w: 'w-[60px]', numeric: true },
+    ],
   },
-  {
-    id: 'volume-summary',
+  'volume-summary': {
     title: 'Volume Summary',
-    desc: 'Deal counts and volumes grouped by day, week, or month',
+    desc: 'Deal counts and volumes by period',
     icon: BarChart3,
     color: '#518dca',
     roles: ['trader', 'treasury', 'admin'],
     filters: ['dateRange', 'groupBy'],
+    columns: [
+      { key: 'period', label: 'Period', w: 'w-[100px]' },
+      { key: 'count', label: '# Deals', w: 'w-[70px]', numeric: true },
+      { key: 'volume', label: 'Total Volume', numeric: true },
+      { key: 'avg', label: 'Avg Deal Size', numeric: true },
+      { key: 'confirmed', label: 'Confirmed', w: 'w-[80px]', numeric: true },
+      { key: 'pending', label: 'Pending', w: 'w-[70px]', numeric: true },
+      { key: 'returned', label: 'Returned', w: 'w-[70px]', numeric: true },
+      { key: 'cancelled', label: 'Cancelled', w: 'w-[70px]', numeric: true },
+    ],
   },
-  {
-    id: 'client-activity',
+  'client-activity': {
     title: 'Client Activity',
-    desc: 'Per-client breakdown of deal volume, frequency, and average size',
+    desc: 'Per-client volume, frequency, and average deal size',
     icon: Briefcase,
     color: '#08263e',
     roles: ['trader', 'treasury', 'admin'],
     filters: ['dateRange'],
+    columns: [
+      { key: 'client', label: 'Client' },
+      { key: 'count', label: '# Deals', w: 'w-[70px]', numeric: true },
+      { key: 'volume', label: 'Total Volume', numeric: true },
+      { key: 'avg', label: 'Avg Deal Size', numeric: true },
+      { key: 'pairs', label: 'Currency Pairs' },
+      { key: 'last_deal', label: 'Last Deal', w: 'w-[90px]' },
+    ],
   },
-];
+};
 
-function ReportCard({ report, role }) {
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+function fmtNum(v, decimals = 2) {
+  if (v == null || v === '') return '';
+  const n = Number(v);
+  if (isNaN(n)) return String(v);
+  return n.toLocaleString(undefined, { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+}
+
+function StatusBadge({ status }) {
+  const colors = {
+    pending: 'bg-amber-50 text-amber-700 border-amber-200',
+    confirmed: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+    returned: 'bg-red-50 text-red-700 border-red-200',
+    cancelled: 'bg-gray-100 text-gray-500 border-gray-200',
+  };
+  return (
+    <span className={`inline-block px-1.5 py-0.5 text-[10px] font-medium rounded border uppercase ${colors[status] || 'bg-gray-50 text-gray-600 border-gray-200'}`}>
+      {status}
+    </span>
+  );
+}
+
+// ── Report Selector (Landing) ───────────────────────────────────────────────
+
+function ReportSelector({ reports, onSelect }) {
+  return (
+    <div data-testid="reports-page">
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold text-[#08263e]" style={{ fontFamily: 'Chivo, sans-serif' }}>Reports</h1>
+        <p className="text-sm text-gray-500 mt-1">Select a report to view data and export</p>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+        {reports.map(([id, r]) => {
+          const Icon = r.icon;
+          return (
+            <button
+              key={id}
+              onClick={() => onSelect(id)}
+              data-testid={`report-select-${id}`}
+              className="text-left p-4 rounded-lg border border-gray-200 hover:border-[#518dca] hover:shadow-md transition-all group bg-white"
+            >
+              <div className="flex items-center gap-3 mb-2">
+                <div className="p-2 rounded-lg transition-colors" style={{ backgroundColor: r.color + '10' }}>
+                  <Icon className="h-5 w-5 transition-colors" style={{ color: r.color }} />
+                </div>
+                <h3 className="text-sm font-semibold text-[#08263e] group-hover:text-[#518dca] transition-colors">{r.title}</h3>
+              </div>
+              <p className="text-xs text-gray-500 leading-relaxed">{r.desc}</p>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ── Report Viewer (Table + Filters + Export) ────────────────────────────────
+
+function ReportViewer({ reportId, report, onBack }) {
+  const [rows, setRows] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [exporting, setExporting] = useState(null);
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [status, setStatus] = useState('');
   const [client, setClient] = useState('');
   const [currency, setCurrency] = useState('');
   const [groupBy, setGroupBy] = useState('daily');
-  const [loading, setLoading] = useState(null); // 'csv' | 'pdf' | null
+  const [sortKey, setSortKey] = useState(null);
+  const [sortDir, setSortDir] = useState('asc');
+  const abortRef = useRef(null);
 
-  const canAccess = report.roles.includes(role);
   const hasFilters = report.filters.length > 0;
+  const Icon = report.icon;
+
+  const fetchData = useCallback(async () => {
+    if (abortRef.current) abortRef.current.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+    setLoading(true);
+    try {
+      const params = { format: 'json' };
+      if (dateFrom) params.date_from = dateFrom;
+      if (dateTo) params.date_to = dateTo;
+      if (status && status !== 'all_statuses' && report.filters.includes('status')) params.status = status;
+      if (client && report.filters.includes('client')) params.client = client;
+      if (currency && report.filters.includes('currency')) params.currency = currency;
+      if (report.filters.includes('groupBy')) params.group_by = groupBy;
+      const { data } = await api.get(`/reports/${reportId}`, { params, signal: controller.signal });
+      setRows(data.rows || []);
+      setTotal(data.total || 0);
+    } catch (err) {
+      if (err.name !== 'CanceledError' && err.code !== 'ERR_CANCELED') {
+        toast.error('Failed to load report data');
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, [reportId, dateFrom, dateTo, status, client, currency, groupBy, report]);
+
+  useEffect(() => {
+    fetchData();
+    return () => { if (abortRef.current) abortRef.current.abort(); };
+  }, [fetchData]);
 
   const handleExport = useCallback(async (format) => {
-    setLoading(format);
+    setExporting(format);
     try {
       const params = { format };
       if (dateFrom) params.date_from = dateFrom;
@@ -97,165 +259,228 @@ function ReportCard({ report, role }) {
       if (client && report.filters.includes('client')) params.client = client;
       if (currency && report.filters.includes('currency')) params.currency = currency;
       if (report.filters.includes('groupBy')) params.group_by = groupBy;
-
-      const resp = await api.get(`/reports/${report.id}`, { params, responseType: 'blob' });
-      const blob = new Blob([resp.data]);
-      const url = URL.createObjectURL(blob);
+      const resp = await api.get(`/reports/${reportId}`, { params, responseType: 'blob' });
+      const url = URL.createObjectURL(new Blob([resp.data]));
       const a = document.createElement('a');
       a.href = url;
-      const ext = format === 'pdf' ? 'pdf' : 'csv';
-      a.download = `${report.id}_${new Date().toISOString().slice(0, 10)}.${ext}`;
+      a.download = `${reportId}_${new Date().toISOString().slice(0, 10)}.${format}`;
       document.body.appendChild(a);
       a.click();
       a.remove();
       URL.revokeObjectURL(url);
-      toast.success(`${report.title} exported as ${format.toUpperCase()}`);
-    } catch (err) {
-      const msg = err.response?.data?.detail || err.message || 'Export failed';
-      toast.error(`Export failed: ${msg}`);
+      toast.success(`Exported as ${format.toUpperCase()}`);
+    } catch {
+      toast.error('Export failed');
     } finally {
-      setLoading(null);
+      setExporting(null);
     }
-  }, [dateFrom, dateTo, status, client, currency, groupBy, report]);
+  }, [reportId, dateFrom, dateTo, status, client, currency, groupBy, report]);
 
-  if (!canAccess) return null;
+  const handleSort = useCallback((key) => {
+    setSortDir(prev => sortKey === key ? (prev === 'asc' ? 'desc' : 'asc') : 'asc');
+    setSortKey(key);
+  }, [sortKey]);
 
-  const Icon = report.icon;
+  const sortedRows = sortKey
+    ? [...rows].sort((a, b) => {
+        const col = report.columns.find(c => c.key === sortKey);
+        let va = a[sortKey], vb = b[sortKey];
+        if (col?.numeric) { va = Number(va) || 0; vb = Number(vb) || 0; }
+        else { va = String(va || '').toLowerCase(); vb = String(vb || '').toLowerCase(); }
+        return sortDir === 'asc' ? (va > vb ? 1 : -1) : (va < vb ? 1 : -1);
+      })
+    : rows;
 
   return (
-    <Card className="border border-gray-200 hover:shadow-md transition-shadow" data-testid={`report-card-${report.id}`}>
-      <CardHeader className="pb-3">
-        <div className="flex items-start justify-between">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg" style={{ backgroundColor: report.color + '12' }}>
-              <Icon className="h-5 w-5" style={{ color: report.color }} />
-            </div>
-            <div>
-              <CardTitle className="text-sm font-semibold text-[#08263e]">{report.title}</CardTitle>
-              <CardDescription className="text-xs mt-0.5">{report.desc}</CardDescription>
-            </div>
+    <div data-testid={`report-view-${reportId}`}>
+      {/* Header */}
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-3">
+          <Button variant="ghost" size="sm" onClick={onBack} className="gap-1 text-gray-500 hover:text-[#08263e]" data-testid="report-back-btn">
+            <ChevronLeft className="h-4 w-4" /> Back
+          </Button>
+          <div className="h-5 w-px bg-gray-200" />
+          <div className="p-1.5 rounded-md" style={{ backgroundColor: report.color + '10' }}>
+            <Icon className="h-4 w-4" style={{ color: report.color }} />
+          </div>
+          <div>
+            <h1 className="text-lg font-bold text-[#08263e]" style={{ fontFamily: 'Chivo, sans-serif' }}>{report.title}</h1>
           </div>
         </div>
-      </CardHeader>
-      <CardContent className="pt-0 space-y-3">
-        {hasFilters && (
-          <div className="grid grid-cols-2 gap-2">
-            {report.filters.includes('dateRange') && (
-              <>
-                <div>
-                  <Label className="text-[10px] text-gray-500 uppercase">From</Label>
-                  <Input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
-                    className="h-8 text-xs" data-testid={`${report.id}-date-from`} />
-                </div>
-                <div>
-                  <Label className="text-[10px] text-gray-500 uppercase">To</Label>
-                  <Input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
-                    className="h-8 text-xs" data-testid={`${report.id}-date-to`} />
-                </div>
-              </>
-            )}
-            {report.filters.includes('status') && (
-              <div>
-                <Label className="text-[10px] text-gray-500 uppercase">Status</Label>
-                <Select value={status} onValueChange={setStatus}>
-                  <SelectTrigger className="h-8 text-xs" data-testid={`${report.id}-status-filter`}>
-                    <SelectValue placeholder="All" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all_statuses">All</SelectItem>
-                    <SelectItem value="pending">Pending</SelectItem>
-                    <SelectItem value="confirmed">Confirmed</SelectItem>
-                    <SelectItem value="returned">Returned</SelectItem>
-                    <SelectItem value="cancelled">Cancelled</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-            {report.filters.includes('client') && (
-              <div>
-                <Label className="text-[10px] text-gray-500 uppercase">Client</Label>
-                <Input placeholder="Search..." value={client} onChange={e => setClient(e.target.value)}
-                  className="h-8 text-xs" data-testid={`${report.id}-client-filter`} />
-              </div>
-            )}
-            {report.filters.includes('currency') && (
-              <div>
-                <Label className="text-[10px] text-gray-500 uppercase">Currency</Label>
-                <Input placeholder="e.g. USD" value={currency} onChange={e => setCurrency(e.target.value)}
-                  className="h-8 text-xs" data-testid={`${report.id}-currency-filter`} />
-              </div>
-            )}
-            {report.filters.includes('groupBy') && (
-              <div className="col-span-2">
-                <Label className="text-[10px] text-gray-500 uppercase">Group By</Label>
-                <Select value={groupBy} onValueChange={setGroupBy}>
-                  <SelectTrigger className="h-8 text-xs" data-testid={`${report.id}-group-by`}>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="daily">Daily</SelectItem>
-                    <SelectItem value="weekly">Weekly</SelectItem>
-                    <SelectItem value="monthly">Monthly</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-          </div>
-        )}
-
-        <div className="flex gap-2 pt-1">
-          <Button
-            variant="outline" size="sm"
-            className="flex-1 h-8 text-xs gap-1.5 border-[#518dca] text-[#518dca] hover:bg-[#518dca]/5"
-            disabled={!!loading}
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-gray-400 mr-2" data-testid="report-row-count">{total} records</span>
+          <Button variant="outline" size="sm" disabled={!!exporting || loading}
             onClick={() => handleExport('csv')}
-            data-testid={`${report.id}-export-csv`}
-          >
-            {loading === 'csv' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileSpreadsheet className="h-3.5 w-3.5" />}
+            className="gap-1.5 text-xs border-[#518dca] text-[#518dca] hover:bg-[#518dca]/5"
+            data-testid="report-export-csv">
+            {exporting === 'csv' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileSpreadsheet className="h-3.5 w-3.5" />}
             CSV
           </Button>
-          <Button
-            size="sm"
-            className="flex-1 h-8 text-xs gap-1.5"
-            style={{ backgroundColor: report.color }}
-            disabled={!!loading}
+          <Button size="sm" disabled={!!exporting || loading}
             onClick={() => handleExport('pdf')}
-            data-testid={`${report.id}-export-pdf`}
-          >
-            {loading === 'pdf' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+            className="gap-1.5 text-xs text-white"
+            style={{ backgroundColor: report.color }}
+            data-testid="report-export-pdf">
+            {exporting === 'pdf' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
             PDF
           </Button>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+
+      {/* Filters */}
+      {hasFilters && (
+        <div className="flex flex-wrap items-end gap-3 mb-4 p-3 bg-[#f1f2f2]/60 rounded-lg border border-gray-100">
+          {report.filters.includes('dateRange') && (
+            <>
+              <div className="w-[140px]">
+                <Label className="text-[10px] text-gray-500 uppercase mb-1 block">From</Label>
+                <Input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
+                  className="h-8 text-xs bg-white" data-testid="filter-date-from" />
+              </div>
+              <div className="w-[140px]">
+                <Label className="text-[10px] text-gray-500 uppercase mb-1 block">To</Label>
+                <Input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
+                  className="h-8 text-xs bg-white" data-testid="filter-date-to" />
+              </div>
+            </>
+          )}
+          {report.filters.includes('status') && (
+            <div className="w-[120px]">
+              <Label className="text-[10px] text-gray-500 uppercase mb-1 block">Status</Label>
+              <Select value={status} onValueChange={setStatus}>
+                <SelectTrigger className="h-8 text-xs bg-white" data-testid="filter-status">
+                  <SelectValue placeholder="All" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all_statuses">All</SelectItem>
+                  <SelectItem value="pending">Pending</SelectItem>
+                  <SelectItem value="confirmed">Confirmed</SelectItem>
+                  <SelectItem value="returned">Returned</SelectItem>
+                  <SelectItem value="cancelled">Cancelled</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+          {report.filters.includes('client') && (
+            <div className="w-[150px]">
+              <Label className="text-[10px] text-gray-500 uppercase mb-1 block">Client</Label>
+              <div className="relative">
+                <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-400" />
+                <Input placeholder="Search..." value={client} onChange={e => setClient(e.target.value)}
+                  className="h-8 text-xs pl-7 bg-white" data-testid="filter-client" />
+              </div>
+            </div>
+          )}
+          {report.filters.includes('currency') && (
+            <div className="w-[100px]">
+              <Label className="text-[10px] text-gray-500 uppercase mb-1 block">Currency</Label>
+              <Input placeholder="e.g. USD" value={currency} onChange={e => setCurrency(e.target.value)}
+                className="h-8 text-xs bg-white" data-testid="filter-currency" />
+            </div>
+          )}
+          {report.filters.includes('groupBy') && (
+            <div className="w-[110px]">
+              <Label className="text-[10px] text-gray-500 uppercase mb-1 block">Group By</Label>
+              <Select value={groupBy} onValueChange={setGroupBy}>
+                <SelectTrigger className="h-8 text-xs bg-white" data-testid="filter-group-by">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="daily">Daily</SelectItem>
+                  <SelectItem value="weekly">Weekly</SelectItem>
+                  <SelectItem value="monthly">Monthly</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Table */}
+      <div className="border border-gray-200 rounded-lg overflow-hidden bg-white">
+        <div className="overflow-x-auto max-h-[calc(100vh-260px)]">
+          <table className="w-full text-xs" data-testid="report-table">
+            <thead className="sticky top-0 z-10">
+              <tr className="bg-[#08263e] text-white">
+                {report.columns.map(col => (
+                  <th key={col.key}
+                    className={`px-3 py-2.5 text-left font-medium cursor-pointer select-none hover:bg-[#0d3354] transition-colors whitespace-nowrap ${col.w || ''} ${col.numeric ? 'text-right' : ''}`}
+                    onClick={() => handleSort(col.key)}
+                    data-testid={`sort-${col.key}`}
+                  >
+                    <span className="inline-flex items-center gap-1">
+                      {col.label}
+                      {sortKey === col.key && (
+                        <ArrowUpDown className="h-3 w-3 opacity-70" />
+                      )}
+                    </span>
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr>
+                  <td colSpan={report.columns.length} className="text-center py-16 text-gray-400">
+                    <Loader2 className="h-5 w-5 animate-spin mx-auto mb-2" />
+                    Loading report data...
+                  </td>
+                </tr>
+              ) : sortedRows.length === 0 ? (
+                <tr>
+                  <td colSpan={report.columns.length} className="text-center py-16 text-gray-400">
+                    No data found for the selected filters
+                  </td>
+                </tr>
+              ) : (
+                sortedRows.map((row, i) => (
+                  <tr key={i} className={`border-t border-gray-100 hover:bg-[#518dca]/5 transition-colors ${i % 2 === 1 ? 'bg-[#f1f2f2]/40' : ''}`}>
+                    {report.columns.map(col => {
+                      const val = row[col.key];
+                      if (col.key === 'status') {
+                        return <td key={col.key} className="px-3 py-2"><StatusBadge status={val} /></td>;
+                      }
+                      if (col.numeric && val != null) {
+                        return <td key={col.key} className="px-3 py-2 text-right tabular-nums font-medium">{fmtNum(val, col.decimals || 2)}</td>;
+                      }
+                      return <td key={col.key} className="px-3 py-2 truncate max-w-[200px]" title={String(val || '')}>{val || ''}</td>;
+                    })}
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+        {/* Footer summary */}
+        {!loading && sortedRows.length > 0 && (
+          <div className="px-3 py-2 bg-[#f1f2f2]/60 border-t border-gray-200 flex items-center justify-between text-[10px] text-gray-500">
+            <span>Showing {sortedRows.length} of {total} records</span>
+            <span>Report generated: {new Date().toLocaleString()}</span>
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
+
+// ── Main Page ───────────────────────────────────────────────────────────────
 
 export default function ReportsPage() {
   const { user } = useAuth();
   const role = user?.role || '';
+  const [activeReport, setActiveReport] = useState(null);
 
-  const visibleReports = REPORTS.filter(r => r.roles.includes(role));
+  const visibleReports = Object.entries(REPORTS).filter(([, r]) => r.roles.includes(role));
 
-  return (
-    <div className="space-y-6" data-testid="reports-page">
-      <div>
-        <h1 className="text-2xl font-bold text-[#08263e]" style={{ fontFamily: 'Chivo, sans-serif' }}>Reports</h1>
-        <p className="text-sm text-gray-500 mt-1">Generate and export FX trading reports</p>
-      </div>
+  if (activeReport && REPORTS[activeReport]) {
+    return (
+      <ReportViewer
+        reportId={activeReport}
+        report={REPORTS[activeReport]}
+        onBack={() => setActiveReport(null)}
+      />
+    );
+  }
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {visibleReports.map(report => (
-          <ReportCard key={report.id} report={report} role={role} />
-        ))}
-      </div>
-
-      {visibleReports.length === 0 && (
-        <div className="text-center py-12 text-gray-400">
-          <FileText className="h-12 w-12 mx-auto mb-3 opacity-50" />
-          <p>No reports available for your role</p>
-        </div>
-      )}
-    </div>
-  );
+  return <ReportSelector reports={visibleReports} onSelect={setActiveReport} />;
 }

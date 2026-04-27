@@ -1,0 +1,37 @@
+{
+  "summary": "Verified Reports redesign (selector → table+filters+export) end-to-end. Backend: 30/30 pytest PASS — added 11 new tests for format=json across all 7 reports (deal-blotter, settlement, open-positions, audit-trail, user-activity, volume-summary, client-activity), incl. RBAC 403 for trader on admin-only reports and status-filter persistence. Existing 19 CSV/PDF tests still PASS. Frontend: full Playwright run as admin and trader — login OK, /reports cards (admin=7, trader=5, audit-trail/user-activity hidden for trader), Deal Blotter table loads 59 records via /api/reports/deal-blotter?format=json (200), CSV+PDF export both download successfully (no 401), status filter applied -> 39 records (200), sort header click works, Back button returns to selector, Settlement (50 rows), Volume Summary with group_by toggle daily(22)→monthly(4) all 200, Audit Trail (admin) loads 106 rows, Trader CSV+PDF export 200. The iter_20 401 export bug is FIXED — ReportsPage now uses the shared axios `api` instance for both table fetch and exports.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_reports.py",
+    "/app/test_reports/pytest/iter21_reports.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "ReportsPage.jsx (487 lines) is on the edge of the 700-line guideline but acceptable; the REPORTS config dict + ReportSelector + ReportViewer split is clean.",
+    "AbortController is correctly used to cancel in-flight requests on filter change; canceled errors are filtered out before toast — good.",
+    "Minor: handleExport falls back to a generic 'Export failed' toast — surfacing the HTTP status from err.response?.status would aid future debugging.",
+    "Backend: volume-summary and client-activity duplicate the trader-scoping logic instead of using _get_deals_for_report (already noted in iter_20). Non-blocking.",
+    "Backend: in audit-trail/user-activity, date_to filter appends 'T23:59:59' to created_at strings; works because audit_logs.created_at is stored as ISO string but brittle if ever migrated to BSON date."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_reports.py"
+  ],
+  "success_rate": {
+    "backend": "100% (30/30)",
+    "frontend": "100% (all 18 functional checks pass)"
+  },
+  "test_credentials": "trader@fxtracker.com/Trader@123 and admin@fxtracker.com/Admin@123 — both used and verified",
+  "seed_data_creation": "None — used existing 59 deals + 106 audit log entries already in DB",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Reports feature is fully verified at backend (CSV+PDF+JSON across 7 reports with RBAC) and frontend (selector→viewer flow, table data, sort, filters, exports for both admin and trader). /app/backend/tests/test_reports.py has 30 regression tests; re-run for any future change to /api/reports/*.",
+  "rca of the issue": "N/A — iter_20 401 export bug confirmed FIXED. ReportsPage.jsx now uses `api.get()` (axios instance with token interceptor at /app/frontend/src/lib/api.js) for both `format=json` table fetches and `responseType:'blob'` exports. All admin and trader CSV/PDF download requests returned HTTP 200 in the live Playwright run with zero /api/reports 4xx/5xx responses observed."
+}

@@ -178,3 +178,81 @@ class TestAuthRequired:
     def test_no_token(self):
         r = requests.get(f"{API}/reports/deal-blotter?format=csv", timeout=15)
         assert r.status_code in (401, 403)
+
+
+
+# ── JSON format (new in iter 21) ──────────────────────────────
+class TestJsonFormat:
+    """Tests for new format=json which feeds the in-app table view."""
+
+    def _check_json_payload(self, r):
+        assert r.status_code == 200, f"{r.status_code}: {r.text[:200]}"
+        assert "application/json" in r.headers.get("content-type", "")
+        body = r.json()
+        assert "rows" in body and "total" in body
+        assert isinstance(body["rows"], list)
+        assert isinstance(body["total"], int)
+        assert body["total"] == len(body["rows"])
+        return body
+
+    def test_deal_blotter_json(self, admin_token):
+        r = requests.get(f"{API}/reports/deal-blotter?format=json", headers=_h(admin_token), timeout=30)
+        body = self._check_json_payload(r)
+        if body["rows"]:
+            row = body["rows"][0]
+            for k in ("reference_number", "deal_date", "client_name", "status"):
+                assert k in row
+
+    def test_settlement_json(self, admin_token):
+        r = requests.get(f"{API}/reports/settlement?format=json", headers=_h(admin_token), timeout=30)
+        self._check_json_payload(r)
+
+    def test_open_positions_json(self, admin_token):
+        r = requests.get(f"{API}/reports/open-positions?format=json", headers=_h(admin_token), timeout=30)
+        body = self._check_json_payload(r)
+        if body["rows"]:
+            row = body["rows"][0]
+            for k in ("pair", "count", "buy_total", "sell_total", "net"):
+                assert k in row
+
+    def test_audit_trail_json_admin(self, admin_token):
+        r = requests.get(f"{API}/reports/audit-trail?format=json", headers=_h(admin_token), timeout=30)
+        self._check_json_payload(r)
+
+    def test_audit_trail_json_trader_forbidden(self, trader_token):
+        r = requests.get(f"{API}/reports/audit-trail?format=json", headers=_h(trader_token), timeout=30)
+        assert r.status_code == 403
+
+    def test_user_activity_json_admin(self, admin_token):
+        r = requests.get(f"{API}/reports/user-activity?format=json", headers=_h(admin_token), timeout=30)
+        self._check_json_payload(r)
+
+    def test_user_activity_json_trader_forbidden(self, trader_token):
+        r = requests.get(f"{API}/reports/user-activity?format=json", headers=_h(trader_token), timeout=30)
+        assert r.status_code == 403
+
+    def test_volume_summary_json_daily(self, admin_token):
+        r = requests.get(f"{API}/reports/volume-summary?format=json&group_by=daily",
+                         headers=_h(admin_token), timeout=30)
+        body = self._check_json_payload(r)
+        if body["rows"]:
+            assert "period" in body["rows"][0]
+
+    def test_volume_summary_json_monthly(self, admin_token):
+        r = requests.get(f"{API}/reports/volume-summary?format=json&group_by=monthly",
+                         headers=_h(admin_token), timeout=30)
+        self._check_json_payload(r)
+
+    def test_client_activity_json(self, admin_token):
+        r = requests.get(f"{API}/reports/client-activity?format=json",
+                         headers=_h(admin_token), timeout=30)
+        body = self._check_json_payload(r)
+        if body["rows"]:
+            assert "client" in body["rows"][0] or "client_name" in body["rows"][0]
+
+    def test_deal_blotter_json_status_filter(self, admin_token):
+        r = requests.get(f"{API}/reports/deal-blotter?format=json&status=pending",
+                         headers=_h(admin_token), timeout=30)
+        body = self._check_json_payload(r)
+        for row in body["rows"]:
+            assert row.get("status") == "pending"

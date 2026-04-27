@@ -979,6 +979,20 @@ async def report_deal_blotter(
         query.setdefault("deal_date", {})["$lte"] = date_to
     deals = await _get_deals_for_report(query, user)
     dr = _date_range_label(date_from, date_to)
+    if fmt == "json":
+        rows = []
+        for d in deals:
+            rows.append({
+                "reference_number": d.get("reference_number", ""), "deal_date": (d.get("deal_date") or "")[:10],
+                "value_date": (d.get("value_date") or "")[:10], "client_name": d.get("client_name", ""),
+                "transaction_type": d.get("transaction_type", ""), "transfer_type": d.get("transfer_type", ""),
+                "buy_currency": d.get("buy_currency", ""), "sell_currency": d.get("sell_currency", ""),
+                "currency_amount": d.get("currency_amount"), "rate": d.get("rate"),
+                "amount": d.get("amount"), "status": d.get("status", ""),
+                "created_by_name": d.get("created_by_name", ""), "processed_by_name": d.get("processed_by_name", ""),
+                "remarks": d.get("remarks", ""),
+            })
+        return {"rows": rows, "total": len(rows)}
     if fmt == "pdf":
         buf = rpt.deal_blotter_pdf(deals, dr)
         return Response(content=buf.read(), media_type="application/pdf",
@@ -1003,6 +1017,19 @@ async def report_settlement(
     # Sort by value date
     deals.sort(key=lambda d: d.get("value_date", ""))
     dr = _date_range_label(date_from, date_to)
+    if fmt == "json":
+        rows = []
+        for d in deals:
+            rows.append({
+                "value_date": (d.get("value_date") or "")[:10], "reference_number": d.get("reference_number", ""),
+                "client_name": d.get("client_name", ""), "buy_currency": d.get("buy_currency", ""),
+                "sell_currency": d.get("sell_currency", ""), "currency_amount": d.get("currency_amount"),
+                "amount": d.get("amount"), "from_bank": d.get("from_bank", ""),
+                "from_account_num": d.get("from_account_num", ""), "to_bank": d.get("to_bank", ""),
+                "to_account_num": d.get("to_account_num", ""),
+                "proofs": len(d.get("settlement_proofs", [])), "status": d.get("status", ""),
+            })
+        return {"rows": rows, "total": len(rows)}
     if fmt == "pdf":
         buf = rpt.settlement_pdf(deals, dr)
         return Response(content=buf.read(), media_type="application/pdf",
@@ -1032,6 +1059,8 @@ async def report_open_positions(
         p["net"] = p["buy_total"] - p["sell_total"]
         positions.append(p)
     dr = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    if fmt == "json":
+        return {"rows": positions, "total": len(positions)}
     if fmt == "pdf":
         buf = rpt.open_positions_pdf(positions, dr)
         return Response(content=buf.read(), media_type="application/pdf",
@@ -1055,6 +1084,16 @@ async def report_audit_trail(
         query.setdefault("created_at", {})["$lte"] = date_to + "T23:59:59"
     logs = await db.audit_logs.find(query, {"_id": 0}).sort("created_at", -1).to_list(50000)
     dr = _date_range_label(date_from, date_to)
+    if fmt == "json":
+        rows = []
+        for l in logs:
+            rows.append({
+                "timestamp": (l.get("created_at") or "")[:19], "action": l.get("action", ""),
+                "entity_type": l.get("entity_type", ""), "entity_ref": l.get("entity_ref", ""),
+                "user_name": l.get("user_name", ""), "user_role": l.get("user_role", ""),
+                "details": l.get("details", ""),
+            })
+        return {"rows": rows, "total": len(rows)}
     if fmt == "pdf":
         buf = rpt.audit_trail_pdf(logs, dr)
         return Response(content=buf.read(), media_type="application/pdf",
@@ -1097,6 +1136,8 @@ async def report_user_activity(
             u["proofs"] += 1
     activities = sorted(user_map.values(), key=lambda x: -x["total"])
     dr = _date_range_label(date_from, date_to)
+    if fmt == "json":
+        return {"rows": activities, "total": len(activities)}
     if fmt == "pdf":
         buf = rpt.user_activity_pdf(activities, dr)
         return Response(content=buf.read(), media_type="application/pdf",
@@ -1148,6 +1189,8 @@ async def report_volume_summary(
         g["avg"] = g["volume"] / g["count"] if g["count"] > 0 else 0
         summary.append(g)
     dr = _date_range_label(date_from, date_to)
+    if fmt == "json":
+        return {"rows": summary, "total": len(summary)}
     if fmt == "pdf":
         buf = rpt.volume_summary_pdf(summary, dr, group_by)
         return Response(content=buf.read(), media_type="application/pdf",
@@ -1192,6 +1235,8 @@ async def report_client_activity(
         del c["pairs_set"]
         result.append(c)
     dr = _date_range_label(date_from, date_to)
+    if fmt == "json":
+        return {"rows": result, "total": len(result)}
     if fmt == "pdf":
         buf = rpt.client_activity_pdf(result, dr)
         return Response(content=buf.read(), media_type="application/pdf",
