@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import { useAuth } from '@/lib/auth';
+import api from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -7,8 +8,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { FileText, Download, FileSpreadsheet, Loader2, Shield, BarChart3, Users, Clock, TrendingUp, Briefcase } from 'lucide-react';
 import { toast } from 'sonner';
-
-const API = process.env.REACT_APP_BACKEND_URL;
 
 const REPORTS = [
   {
@@ -76,7 +75,7 @@ const REPORTS = [
   },
 ];
 
-function ReportCard({ report, role, token }) {
+function ReportCard({ report, role }) {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [status, setStatus] = useState('');
@@ -91,22 +90,16 @@ function ReportCard({ report, role, token }) {
   const handleExport = useCallback(async (format) => {
     setLoading(format);
     try {
-      const params = new URLSearchParams({ format });
-      if (dateFrom) params.set('date_from', dateFrom);
-      if (dateTo) params.set('date_to', dateTo);
-      if (status && status !== 'all_statuses' && report.filters.includes('status')) params.set('status', status);
-      if (client && report.filters.includes('client')) params.set('client', client);
-      if (currency && report.filters.includes('currency')) params.set('currency', currency);
-      if (report.filters.includes('groupBy')) params.set('group_by', groupBy);
+      const params = { format };
+      if (dateFrom) params.date_from = dateFrom;
+      if (dateTo) params.date_to = dateTo;
+      if (status && status !== 'all_statuses' && report.filters.includes('status')) params.status = status;
+      if (client && report.filters.includes('client')) params.client = client;
+      if (currency && report.filters.includes('currency')) params.currency = currency;
+      if (report.filters.includes('groupBy')) params.group_by = groupBy;
 
-      const resp = await fetch(`${API}/api/reports/${report.id}?${params}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!resp.ok) {
-        const err = await resp.json().catch(() => ({}));
-        throw new Error(err.detail || `HTTP ${resp.status}`);
-      }
-      const blob = await resp.blob();
+      const resp = await api.get(`/reports/${report.id}`, { params, responseType: 'blob' });
+      const blob = new Blob([resp.data]);
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -118,11 +111,12 @@ function ReportCard({ report, role, token }) {
       URL.revokeObjectURL(url);
       toast.success(`${report.title} exported as ${format.toUpperCase()}`);
     } catch (err) {
-      toast.error(`Export failed: ${err.message}`);
+      const msg = err.response?.data?.detail || err.message || 'Export failed';
+      toast.error(`Export failed: ${msg}`);
     } finally {
       setLoading(null);
     }
-  }, [dateFrom, dateTo, status, client, currency, groupBy, report, token]);
+  }, [dateFrom, dateTo, status, client, currency, groupBy, report]);
 
   if (!canAccess) return null;
 
@@ -238,7 +232,7 @@ function ReportCard({ report, role, token }) {
 }
 
 export default function ReportsPage() {
-  const { user, token } = useAuth();
+  const { user } = useAuth();
   const role = user?.role || '';
 
   const visibleReports = REPORTS.filter(r => r.roles.includes(role));
@@ -252,7 +246,7 @@ export default function ReportsPage() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {visibleReports.map(report => (
-          <ReportCard key={report.id} report={report} role={role} token={token} />
+          <ReportCard key={report.id} report={report} role={role} />
         ))}
       </div>
 

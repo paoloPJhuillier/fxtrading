@@ -1,7 +1,7 @@
 # FX Trading Tracker — PRD
 
 ## Original Problem Statement
-Build an FX Trading Tracker platform with secure role-based login, deal ticket management for traders, processing capabilities for treasury operations, and admin features for user management and audit trails. Prepare for on-premise deployment with switchable storage (Emergent ↔ Huawei OBS/S3) and switchable database (MongoDB ↔ Couchbase Enterprise).
+Build an FX Trading Tracker platform with secure role-based login, deal ticket management for traders, processing capabilities for treasury operations, and admin features for user management and audit trails. Prepare for on-premise deployment with switchable storage (Emergent / Huawei OBS / S3) and switchable database (MongoDB / Couchbase Enterprise).
 
 ## User Personas
 - **Trader**: Creates and manages FX deal tickets
@@ -10,27 +10,9 @@ Build an FX Trading Tracker platform with secure role-based login, deal ticket m
 
 ## Architecture
 - **Frontend**: React, React Router, TailwindCSS, Shadcn/UI
-- **Backend**: FastAPI, Pydantic
-- **Database**: Switchable via `DB_TYPE` env var:
-  - `mongodb` — MongoDB via motor (dev/default)
-  - `couchbase` — Couchbase Enterprise SDK 4.x with scopes & collections (on-prem)
-- **Storage**: Switchable via `STORAGE_TYPE` env var:
-  - `emergent` — Emergent Object Storage (dev/cloud)
-  - `s3` — S3-compatible (Huawei OBS, AWS S3, MinIO for on-prem)
-
-## Couchbase Scope/Collection Mapping
-| Scope | Collection | MongoDB Equivalent |
-|-------|-----------|-------------------|
-| identity | users | users |
-| trading | deals | deals |
-| trading | deal_counters | counters |
-| reference | companies | companies |
-| reference | banks | banks |
-| reference | bank_accounts | bank_accounts |
-| reference | currencies | currencies |
-| reference | transaction_types | transaction_types |
-| reference | transfer_types | transfer_types |
-| audit | audit_logs | audit_logs |
+- **Backend**: FastAPI, Pydantic, reportlab (PDF generation)
+- **Database**: Switchable via `DB_TYPE` env var: `mongodb` | `couchbase`
+- **Storage**: Switchable via `STORAGE_TYPE` env var: `emergent` | `s3`
 
 ## Credentials
 - Trader: trader@fxtracker.com / Trader@123
@@ -38,18 +20,16 @@ Build an FX Trading Tracker platform with secure role-based login, deal ticket m
 - Admin: admin@fxtracker.com / Admin@123
 
 ## Key Files
-- `backend/server.py` — All API endpoints (uses abstracted db/storage)
-- `backend/services/database.py` — Database factory, SCOPE_MAP, get_database()
-- `backend/services/db_mongo.py` — MongoDB backend (thin motor wrapper)
-- `backend/services/db_couchbase.py` — Couchbase backend (N1QL + KV + subdoc)
-- `backend/services/storage.py` — Storage abstraction (EmergentStorage, S3Storage)
+- `backend/server.py` — All API endpoints
+- `backend/services/database.py` — Database factory + SCOPE_MAP
+- `backend/services/db_mongo.py` — MongoDB backend
+- `backend/services/db_couchbase.py` — Couchbase backend
+- `backend/services/storage.py` — Storage abstraction
+- `backend/services/reports.py` — Report generation (CSV + PDF)
+- `frontend/src/pages/ReportsPage.jsx` — Reports UI
+- `frontend/src/pages/NewDealPage.jsx`, `EditDealPage.jsx`, `DealsPage.jsx`
 - `frontend/src/components/DealFormFields.jsx` — Shared form components
-- `frontend/src/pages/NewDealPage.jsx` — Create new deal
-- `frontend/src/pages/EditDealPage.jsx` — Edit returned deal
-- `frontend/src/pages/DealsPage.jsx` — Trader deal list + detail dialog
-- `frontend/src/pages/TreasuryPage.jsx` — Treasury deal queue
-- `frontend/src/pages/ReferenceDataPage.jsx` — Admin reference data + bank accounts
-- `frontend/src/App.js` — Routes including /deals/:id/edit
+- `frontend/src/App.js` — Routes
 
 ## What's Been Implemented
 
@@ -60,37 +40,28 @@ Build an FX Trading Tracker platform with secure role-based login, deal ticket m
 - AbortController, lazy loading, deferred rendering, component memoization
 
 ### Bank Account Management (Complete - Mar 17, 2026)
-- BankAccountSelect dropdown, inline "Add New Account", admin management dialog
-
 ### Deal History Timeline (Complete - Mar 17, 2026)
-- Auto-recorded on all deal mutations, visible in detail dialogs
-
 ### Split Settlement Proofs (Complete - Mar 17, 2026)
-- Client/Processor separate upload sections on all pages
-
 ### Returned Deal Edit Page (Complete - Mar 17, 2026)
-- Dedicated `/deals/:id/edit` page with identical layout to New Deal page
-
 ### Switchable Storage Abstraction (Complete - Apr 24, 2026)
-- `backend/services/storage.py`: EmergentStorage + S3Storage via `STORAGE_TYPE` env var
-- Tested with MinIO (local S3) and Emergent cloud storage
-- `GET /api/storage/status` admin diagnostic endpoint
-
 ### Switchable Database Abstraction (Complete - Apr 24, 2026)
-- `backend/services/database.py`: Factory with MongoDB and Couchbase backends
-- Couchbase uses scopes & collections (identity, trading, reference, audit)
-- MongoDB query syntax automatically translated to N1QL for Couchbase
-- Supports: find, insert, update ($set/$push/$pull/$unset/$inc), delete, count, aggregate
-- Auto-creates scopes, collections, and indexes on first Couchbase startup
-- `GET /api/database/status` admin diagnostic endpoint
-- Tested end-to-end on both MongoDB and Couchbase Capella (21/21 backend + frontend)
+- Couchbase scopes: identity, trading, reference, audit
 
-### Dashboard & Treasury Enhancements (Complete)
-- Today/Yesterday shortcuts, Returned tab, Bank Name column, filters, column toggle
+### Reports Feature (Complete - Apr 27, 2026)
+- 7 industry-standard FX trading reports, all exportable as CSV + PDF
+- **Deal Blotter**: Complete deal log with filters (date, status, client, currency)
+- **Settlement Report**: Deals by value date with bank details and proof status
+- **Open Positions**: Pending deals by currency pair showing net exposure
+- **Transaction Audit Trail**: Full action history (admin only)
+- **User Activity**: Per-user action breakdown (admin only)
+- **Volume Summary**: Deal counts/volumes grouped by day/week/month
+- **Client Activity**: Per-client volume, frequency, average deal size
+- PDF branding: Primary #08263e/#ec474e, Secondary #518dca/#f1f2f2
+- Dedicated /reports page with role-based visibility
+- Backend: 19/19 tests passed
 
 ---
 
 ## Backlog / Future Tasks
 - **P1**: Backend refactoring — split server.py into /routes, /models, /services modules
-- **P2**: Export deals frontend button (backend CSV endpoint exists)
 - **P2**: Email notifications for deal status changes
