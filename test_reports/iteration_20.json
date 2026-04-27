@@ -1,0 +1,43 @@
+{
+  "summary": "Tested new Reports feature (7 report types × CSV+PDF). Backend: 19/19 pytest PASS — all endpoints work correctly (deal-blotter, settlement, open-positions, audit-trail, user-activity, volume-summary, client-activity) with proper filters, group_by, RBAC (403 for trader on admin-only reports), and Content-Disposition headers. Frontend: /reports page renders correctly (trader sees 5 cards, admin sees all 7). RBAC visibility works. However, ALL export buttons fail with HTTP 401 due to AuthContext not exposing the JWT token to ReportsPage.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {
+        "flow": "Report export (CSV & PDF) — ALL 7 report types affected",
+        "issue": "All export buttons trigger 401 Unauthorized. Root cause: /app/frontend/src/lib/auth.js exposes only { user, login, logout, loading } via AuthContext but ReportsPage.jsx destructures `const { user, token } = useAuth()` — token is undefined, so the fetch sends `Authorization: Bearer undefined`. UI shows toast 'Export failed: HTTP 401' on every click.",
+        "affected_selectors": ["[data-testid$='-export-csv']", "[data-testid$='-export-pdf']"]
+      }
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_reports.py",
+    "/app/test_reports/pytest/reports_tests.xml"
+  ],
+  "action_items": [
+    "FIX (1-line): In /app/frontend/src/lib/auth.js, expose token in the AuthContext value — e.g., add a `token` state synced to localStorage('fx_token') and include it in the Provider value: `<AuthContext.Provider value={{ user, token, login, logout, loading }}>`. Update login() to also `setToken(res.data.token)` and logout() to clear. Alternatively, refactor ReportsPage to use the axios `api` instance with `responseType: 'blob'` (cleaner — existing interceptor already injects the bearer token)."
+  ],
+  "critical_code_review_comments": [
+    "ReportsPage.jsx uses raw fetch() + hand-rolled Authorization header instead of the shared axios `api` instance that already has a request interceptor for token injection. Switching to axios with responseType:'blob' would eliminate the current bug and also get the 401-redirect interceptor behavior for free.",
+    "Backend /api/reports/volume-summary and /api/reports/client-activity bypass _get_deals_for_report helper and duplicate the trader-scoping logic — consider centralizing.",
+    "In server.py line 1055/1078, date_to filter appends 'T23:59:59' to created_at — fine for ISO strings but brittle if created_at is stored as BSON date; currently works because audit_logs.created_at is stored as ISO string."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_reports.py"
+  ],
+  "success_rate": {
+    "backend": "100% (19/19)",
+    "frontend": "40% (page renders + RBAC OK; all export integrations broken)"
+  },
+  "test_credentials": "trader@fxtracker.com/Trader@123, admin@fxtracker.com/Admin@123 — both worked",
+  "seed_data_creation": "None — relied on deals created in previous iterations. Reports returned non-empty CSV/PDF content.",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend is fully verified with /app/backend/tests/test_reports.py (19 passing tests). Only remaining work is to re-run the Playwright flow after the frontend AuthContext fix to confirm exports succeed with HTTP 200 and content-disposition attachment headers.",
+  "rca of the issue": "RCA for the 401 frontend export bug: ReportsPage.jsx (line 241) destructures `token` from useAuth(), but auth.js's AuthContext.Provider value only contains { user, login, logout, loading }. `token` is therefore always undefined inside ReportsPage. The `fetch(..., { headers: { Authorization: `Bearer ${token}` } })` call sends literally 'Bearer undefined', which backend's JWT middleware rejects with 401. Reproduction: login as admin → /reports → click any CSV/PDF button → toast 'Export failed: HTTP 401' and network tab shows 401 on the /api/reports/* request. Mitigation options: (1) expose token in AuthContext value, (2) read localStorage.getItem('fx_token') directly in ReportsPage, or (3) switch ReportsPage to use the axios `api` instance (recommended — interceptor already attaches token)."
+}

@@ -941,6 +941,265 @@ async def startup():
 async def root():
     return {"message": "FX Trading Tracker API"}
 
+
+# --- Reports ---
+from services import reports as rpt
+
+async def _get_deals_for_report(query, user):
+    """Shared query builder for report endpoints."""
+    if user["role"] == "trader":
+        query["created_by"] = user["id"]
+    return await db.deals.find(query, {"_id": 0}).sort("created_at", -1).to_list(50000)
+
+def _date_range_label(date_from, date_to):
+    f = date_from or "All"
+    t = date_to or "Present"
+    return f"{f} to {t}"
+
+@api_router.get("/reports/deal-blotter")
+async def report_deal_blotter(
+    fmt: str = Query("csv", alias="format"),
+    date_from: Optional[str] = Query(None),
+    date_to: Optional[str] = Query(None),
+    status_filter: Optional[str] = Query(None, alias="status"),
+    client: Optional[str] = Query(None),
+    currency: Optional[str] = Query(None),
+    user=Depends(get_current_user)
+):
+    query = {}
+    if status_filter:
+        query["status"] = status_filter
+    if client:
+        query["client_name"] = {"$regex": client, "$options": "i"}
+    if currency:
+        query["$or"] = [{"buy_currency": currency}, {"sell_currency": currency}]
+    if date_from:
+        query.setdefault("deal_date", {})["$gte"] = date_from
+    if date_to:
+        query.setdefault("deal_date", {})["$lte"] = date_to
+    deals = await _get_deals_for_report(query, user)
+    dr = _date_range_label(date_from, date_to)
+    if fmt == "pdf":
+        buf = rpt.deal_blotter_pdf(deals, dr)
+        return Response(content=buf.read(), media_type="application/pdf",
+                        headers={"Content-Disposition": f"attachment; filename=deal_blotter_{datetime.now(timezone.utc).strftime('%Y%m%d')}.pdf"})
+    csv_data = rpt.deal_blotter_csv(deals)
+    return Response(content=csv_data, media_type="text/csv",
+                    headers={"Content-Disposition": f"attachment; filename=deal_blotter_{datetime.now(timezone.utc).strftime('%Y%m%d')}.csv"})
+
+@api_router.get("/reports/settlement")
+async def report_settlement(
+    fmt: str = Query("csv", alias="format"),
+    date_from: Optional[str] = Query(None),
+    date_to: Optional[str] = Query(None),
+    user=Depends(get_current_user)
+):
+    query = {"$or": [{"status": "confirmed"}, {"status": "pending"}]}
+    if date_from:
+        query.setdefault("value_date", {})["$gte"] = date_from
+    if date_to:
+        query.setdefault("value_date", {})["$lte"] = date_to
+    deals = await _get_deals_for_report(query, user)
+    # Sort by value date
+    deals.sort(key=lambda d: d.get("value_date", ""))
+    dr = _date_range_label(date_from, date_to)
+    if fmt == "pdf":
+        buf = rpt.settlement_pdf(deals, dr)
+        return Response(content=buf.read(), media_type="application/pdf",
+                        headers={"Content-Disposition": f"attachment; filename=settlement_report_{datetime.now(timezone.utc).strftime('%Y%m%d')}.pdf"})
+    csv_data = rpt.settlement_csv(deals)
+    return Response(content=csv_data, media_type="text/csv",
+                    headers={"Content-Disposition": f"attachment; filename=settlement_report_{datetime.now(timezone.utc).strftime('%Y%m%d')}.csv"})
+
+@api_router.get("/reports/open-positions")
+async def report_open_positions(
+    fmt: str = Query("csv", alias="format"),
+    user=Depends(get_current_user)
+):
+    query = {"status": "pending"}
+    deals = await _get_deals_for_report(query, user)
+    # Group by currency pair
+    pairs = {}
+    for d in deals:
+        pair = f"{d.get('buy_currency','')}/{d.get('sell_currency','')}"
+        if pair not in pairs:
+            pairs[pair] = {"pair": pair, "count": 0, "buy_total": 0, "sell_total": 0}
+        pairs[pair]["count"] += 1
+        pairs[pair]["buy_total"] += float(d.get("currency_amount", 0) or 0)
+        pairs[pair]["sell_total"] += float(d.get("amount", 0) or 0)
+    positions = []
+    for p in sorted(pairs.values(), key=lambda x: -x["buy_total"]):
+        p["net"] = p["buy_total"] - p["sell_total"]
+        positions.append(p)
+    dr = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    if fmt == "pdf":
+        buf = rpt.open_positions_pdf(positions, dr)
+        return Response(content=buf.read(), media_type="application/pdf",
+                        headers={"Content-Disposition": f"attachment; filename=open_positions_{dr}.pdf"})
+    csv_data = rpt.open_positions_csv(positions)
+    return Response(content=csv_data, media_type="text/csv",
+                    headers={"Content-Disposition": f"attachment; filename=open_positions_{dr}.csv"})
+
+@api_router.get("/reports/audit-trail")
+async def report_audit_trail(
+    fmt: str = Query("csv", alias="format"),
+    date_from: Optional[str] = Query(None),
+    date_to: Optional[str] = Query(None),
+    user=Depends(get_current_user)
+):
+    await require_role(user, ["admin"])
+    query = {}
+    if date_from:
+        query.setdefault("created_at", {})["$gte"] = date_from
+    if date_to:
+        query.setdefault("created_at", {})["$lte"] = date_to + "T23:59:59"
+    logs = await db.audit_logs.find(query, {"_id": 0}).sort("created_at", -1).to_list(50000)
+    dr = _date_range_label(date_from, date_to)
+    if fmt == "pdf":
+        buf = rpt.audit_trail_pdf(logs, dr)
+        return Response(content=buf.read(), media_type="application/pdf",
+                        headers={"Content-Disposition": f"attachment; filename=audit_trail_{datetime.now(timezone.utc).strftime('%Y%m%d')}.pdf"})
+    csv_data = rpt.audit_trail_csv(logs)
+    return Response(content=csv_data, media_type="text/csv",
+                    headers={"Content-Disposition": f"attachment; filename=audit_trail_{datetime.now(timezone.utc).strftime('%Y%m%d')}.csv"})
+
+@api_router.get("/reports/user-activity")
+async def report_user_activity(
+    fmt: str = Query("csv", alias="format"),
+    date_from: Optional[str] = Query(None),
+    date_to: Optional[str] = Query(None),
+    user=Depends(get_current_user)
+):
+    await require_role(user, ["admin"])
+    query = {}
+    if date_from:
+        query.setdefault("created_at", {})["$gte"] = date_from
+    if date_to:
+        query.setdefault("created_at", {})["$lte"] = date_to + "T23:59:59"
+    logs = await db.audit_logs.find(query, {"_id": 0}).to_list(50000)
+    # Aggregate by user
+    user_map = {}
+    for l in logs:
+        uid = l.get("user_id", "unknown")
+        if uid not in user_map:
+            user_map[uid] = {"user_name": l.get("user_name", ""), "role": l.get("user_role", ""),
+                             "created": 0, "processed": 0, "returned": 0, "proofs": 0, "total": 0}
+        u = user_map[uid]
+        u["total"] += 1
+        action = l.get("action", "")
+        if action == "deal_created":
+            u["created"] += 1
+        elif action in ("deal_confirmed",):
+            u["processed"] += 1
+        elif action == "deal_returned":
+            u["returned"] += 1
+        elif action == "proof_uploaded":
+            u["proofs"] += 1
+    activities = sorted(user_map.values(), key=lambda x: -x["total"])
+    dr = _date_range_label(date_from, date_to)
+    if fmt == "pdf":
+        buf = rpt.user_activity_pdf(activities, dr)
+        return Response(content=buf.read(), media_type="application/pdf",
+                        headers={"Content-Disposition": f"attachment; filename=user_activity_{datetime.now(timezone.utc).strftime('%Y%m%d')}.pdf"})
+    csv_data = rpt.user_activity_csv(activities)
+    return Response(content=csv_data, media_type="text/csv",
+                    headers={"Content-Disposition": f"attachment; filename=user_activity_{datetime.now(timezone.utc).strftime('%Y%m%d')}.csv"})
+
+@api_router.get("/reports/volume-summary")
+async def report_volume_summary(
+    fmt: str = Query("csv", alias="format"),
+    date_from: Optional[str] = Query(None),
+    date_to: Optional[str] = Query(None),
+    group_by: str = Query("daily"),
+    user=Depends(get_current_user)
+):
+    query = {}
+    if user["role"] == "trader":
+        query["created_by"] = user["id"]
+    if date_from:
+        query.setdefault("deal_date", {})["$gte"] = date_from
+    if date_to:
+        query.setdefault("deal_date", {})["$lte"] = date_to
+    deals = await db.deals.find(query, {"_id": 0}).sort("deal_date", 1).to_list(50000)
+    # Group
+    groups = {}
+    for d in deals:
+        dd = d.get("deal_date", "")[:10]
+        if group_by == "weekly":
+            try:
+                dt = datetime.strptime(dd, "%Y-%m-%d")
+                period = f"{dt.strftime('%Y-W%V')}"
+            except ValueError:
+                period = dd
+        elif group_by == "monthly":
+            period = dd[:7]
+        else:
+            period = dd
+        if period not in groups:
+            groups[period] = {"period": period, "count": 0, "volume": 0, "confirmed": 0, "pending": 0, "returned": 0, "cancelled": 0}
+        g = groups[period]
+        g["count"] += 1
+        g["volume"] += float(d.get("amount", 0) or 0)
+        s = d.get("status", "")
+        if s in g:
+            g[s] += 1
+    summary = []
+    for g in sorted(groups.values(), key=lambda x: x["period"]):
+        g["avg"] = g["volume"] / g["count"] if g["count"] > 0 else 0
+        summary.append(g)
+    dr = _date_range_label(date_from, date_to)
+    if fmt == "pdf":
+        buf = rpt.volume_summary_pdf(summary, dr, group_by)
+        return Response(content=buf.read(), media_type="application/pdf",
+                        headers={"Content-Disposition": f"attachment; filename=volume_summary_{datetime.now(timezone.utc).strftime('%Y%m%d')}.pdf"})
+    csv_data = rpt.volume_summary_csv(summary)
+    return Response(content=csv_data, media_type="text/csv",
+                    headers={"Content-Disposition": f"attachment; filename=volume_summary_{datetime.now(timezone.utc).strftime('%Y%m%d')}.csv"})
+
+@api_router.get("/reports/client-activity")
+async def report_client_activity(
+    fmt: str = Query("csv", alias="format"),
+    date_from: Optional[str] = Query(None),
+    date_to: Optional[str] = Query(None),
+    user=Depends(get_current_user)
+):
+    query = {}
+    if user["role"] == "trader":
+        query["created_by"] = user["id"]
+    if date_from:
+        query.setdefault("deal_date", {})["$gte"] = date_from
+    if date_to:
+        query.setdefault("deal_date", {})["$lte"] = date_to
+    deals = await db.deals.find(query, {"_id": 0}).to_list(50000)
+    # Group by client
+    clients = {}
+    for d in deals:
+        cn = d.get("client_name", "Unknown")
+        if cn not in clients:
+            clients[cn] = {"client": cn, "count": 0, "volume": 0, "pairs_set": set(), "last_deal": ""}
+        c = clients[cn]
+        c["count"] += 1
+        c["volume"] += float(d.get("amount", 0) or 0)
+        pair = f"{d.get('buy_currency','')}/{d.get('sell_currency','')}"
+        c["pairs_set"].add(pair)
+        dd = d.get("deal_date", "")
+        if dd > c["last_deal"]:
+            c["last_deal"] = dd
+    result = []
+    for c in sorted(clients.values(), key=lambda x: -x["volume"]):
+        c["avg"] = c["volume"] / c["count"] if c["count"] > 0 else 0
+        c["pairs"] = ", ".join(sorted(c["pairs_set"]))
+        del c["pairs_set"]
+        result.append(c)
+    dr = _date_range_label(date_from, date_to)
+    if fmt == "pdf":
+        buf = rpt.client_activity_pdf(result, dr)
+        return Response(content=buf.read(), media_type="application/pdf",
+                        headers={"Content-Disposition": f"attachment; filename=client_activity_{datetime.now(timezone.utc).strftime('%Y%m%d')}.pdf"})
+    csv_data = rpt.client_activity_csv(result)
+    return Response(content=csv_data, media_type="text/csv",
+                    headers={"Content-Disposition": f"attachment; filename=client_activity_{datetime.now(timezone.utc).strftime('%Y%m%d')}.csv"})
+
 @api_router.get("/storage/status")
 async def storage_status(user=Depends(get_current_user)):
     await require_role(user, ["admin"])

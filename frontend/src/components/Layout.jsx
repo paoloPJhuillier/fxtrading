@@ -9,7 +9,7 @@ import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import {
   LayoutDashboard, FileText, PlusCircle, ClipboardCheck,
-  Database, Users, History, LogOut, Menu, TrendingUp, Activity, KeyRound
+  Database, Users, History, LogOut, Menu, TrendingUp, Activity, KeyRound, BarChart3
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -29,10 +29,12 @@ const navConfig = {
     { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
     { to: '/deals', icon: FileText, label: 'My Deals' },
     { to: '/deals/new', icon: PlusCircle, label: 'New Deal' },
+    { to: '/reports', icon: BarChart3, label: 'Reports' },
   ],
   treasury: [
     { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
     { to: '/treasury', icon: ClipboardCheck, label: 'Deal Queue' },
+    { to: '/reports', icon: BarChart3, label: 'Reports' },
   ],
   admin: [
     { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
@@ -40,6 +42,7 @@ const navConfig = {
     { to: '/users', icon: Users, label: 'Users' },
     { to: '/transactions', icon: History, label: 'Transactions' },
     { to: '/audit-log', icon: Activity, label: 'Audit Trail' },
+    { to: '/reports', icon: BarChart3, label: 'Reports' },
   ],
 };
 
