@@ -17,11 +17,7 @@ Build an FX Trading Tracker platform with secure role-based login, deal ticket m
 ## What's Been Implemented
 
 ### Core Platform (Complete)
-- JWT auth, deal CRUD, dashboard, treasury queue, admin pages, file upload
-
 ### Performance Optimizations (Complete)
-- AbortController, lazy loading, deferred rendering, memoization
-
 ### Bank Account Management (Complete - Mar 17, 2026)
 ### Deal History Timeline (Complete - Mar 17, 2026)
 ### Split Settlement Proofs (Complete - Mar 17, 2026)
@@ -30,24 +26,26 @@ Build an FX Trading Tracker platform with secure role-based login, deal ticket m
 ### Switchable Database Abstraction (Complete - Apr 24, 2026)
 
 ### Reports Feature (Complete - Apr 28, 2026)
-- 7 industry-standard FX trading reports with tabular data view + CSV/PDF export
-- Deal Blotter, Settlement, Open Positions, Audit Trail, User Activity, Volume Summary, Client Activity
-- **Admin-configurable permissions**: Enable/disable each report per role (trader/treasury/admin)
-  - Stored in report_permissions collection
-  - Managed via Permissions dialog (admin only)
-  - Enforced both server-side and client-side
-- **Year-to-Date default date range**: All date filters pre-populated with Jan 1 → today
-- PDF branding: Primary #08263e/#ec474e, Secondary #518dca/#f1f2f2
-- Tested: 45/45 backend + 16/16 frontend (100%)
+- 7 industry-standard reports with tabular view + CSV/PDF export
+- **Admin-configurable permissions**: Per-role enable/disable via Permissions dialog
+- **YTD default date range**: Jan 1 → today
+- **Additional filters**: Client Activity (client), Settlement (from/to bank), Audit Trail (user)
+- **Server-side pagination**: Deal Blotter, Settlement, Audit Trail use `page`/`limit` params with `count_documents()` for total
+- **Server-side sorting**: `sort_by`/`sort_dir` params on paginated reports
+- **Debounced search**: 400ms debounce on all text filter inputs (client, currency, bank, user)
+- **Aggregation reports** (Volume Summary, Client Activity, User Activity, Open Positions) return bounded summary rows — no pagination needed
+- **CSV/PDF exports** always fetch full dataset regardless of current page
+- Tested: 16/16 pagination + 8/8 frontend (100%)
 
 ### Documentation (Complete - Apr 28, 2026)
-- Technical Design Document (PDF + DOCX) — architecture, APIs, data models, security
-- Deployment Guide (PDF + DOCX) — prerequisites, env config, network requirements
-- Generated in /app/docs/
+- Technical Design Document + Deployment Guide (PDF + DOCX) in /app/docs/
 
 ---
 
 ## Backlog / Future Tasks
-- **P1**: Backend refactoring — split server.py into /routes, /models, /services modules
+- **P1**: Backend refactoring — split server.py into /routes, /models, /services
+- **P1**: Move aggregation reports to MongoDB $group pipelines for large volumes
+- **P2**: Rows-per-page dropdown for paginated reports
+- **P2**: Server-side sortable column allowlist per report
 - **P2**: Email notifications for deal status changes
-- **P2**: Scheduled report delivery (auto-email daily/weekly reports)
+- **P2**: Scheduled report delivery (auto-email daily/weekly)
