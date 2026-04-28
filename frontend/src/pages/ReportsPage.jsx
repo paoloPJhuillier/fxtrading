@@ -44,7 +44,7 @@ const REPORTS = {
     icon: Clock,
     color: '#ec474e',
     roles: ['trader', 'treasury', 'admin'],
-    filters: ['dateRange'],
+    filters: ['dateRange', 'fromBank', 'toBank'],
     columns: [
       { key: 'value_date', label: 'Value Date', w: 'w-[90px]' },
       { key: 'reference_number', label: 'Ref#', w: 'w-[100px]' },
@@ -80,7 +80,7 @@ const REPORTS = {
     icon: Shield,
     color: '#08263e',
     roles: ['admin'],
-    filters: ['dateRange'],
+    filters: ['dateRange', 'auditUser'],
     columns: [
       { key: 'timestamp', label: 'Timestamp', w: 'w-[140px]' },
       { key: 'action', label: 'Action', w: 'w-[110px]' },
@@ -132,7 +132,7 @@ const REPORTS = {
     icon: Briefcase,
     color: '#08263e',
     roles: ['trader', 'treasury', 'admin'],
-    filters: ['dateRange'],
+    filters: ['dateRange', 'client'],
     columns: [
       { key: 'client', label: 'Client' },
       { key: 'count', label: '# Deals', w: 'w-[70px]', numeric: true },
@@ -235,6 +235,9 @@ function ReportViewer({ reportId, report, onBack }) {
   const [status, setStatus] = useState('');
   const [client, setClient] = useState('');
   const [currency, setCurrency] = useState('');
+  const [fromBank, setFromBank] = useState('');
+  const [toBank, setToBank] = useState('');
+  const [auditUser, setAuditUser] = useState('');
   const [groupBy, setGroupBy] = useState('daily');
   const [sortKey, setSortKey] = useState(null);
   const [sortDir, setSortDir] = useState('asc');
@@ -255,6 +258,9 @@ function ReportViewer({ reportId, report, onBack }) {
       if (status && status !== 'all_statuses' && report.filters.includes('status')) params.status = status;
       if (client && report.filters.includes('client')) params.client = client;
       if (currency && report.filters.includes('currency')) params.currency = currency;
+      if (fromBank && report.filters.includes('fromBank')) params.from_bank = fromBank;
+      if (toBank && report.filters.includes('toBank')) params.to_bank = toBank;
+      if (auditUser && report.filters.includes('auditUser')) params.user_name = auditUser;
       if (report.filters.includes('groupBy')) params.group_by = groupBy;
       const { data } = await api.get(`/reports/${reportId}`, { params, signal: controller.signal });
       setRows(data.rows || []);
@@ -266,7 +272,7 @@ function ReportViewer({ reportId, report, onBack }) {
     } finally {
       setLoading(false);
     }
-  }, [reportId, dateFrom, dateTo, status, client, currency, groupBy, report]);
+  }, [reportId, dateFrom, dateTo, status, client, currency, fromBank, toBank, auditUser, groupBy, report]);
 
   useEffect(() => {
     fetchData();
@@ -282,6 +288,9 @@ function ReportViewer({ reportId, report, onBack }) {
       if (status && status !== 'all_statuses' && report.filters.includes('status')) params.status = status;
       if (client && report.filters.includes('client')) params.client = client;
       if (currency && report.filters.includes('currency')) params.currency = currency;
+      if (fromBank && report.filters.includes('fromBank')) params.from_bank = fromBank;
+      if (toBank && report.filters.includes('toBank')) params.to_bank = toBank;
+      if (auditUser && report.filters.includes('auditUser')) params.user_name = auditUser;
       if (report.filters.includes('groupBy')) params.group_by = groupBy;
       const resp = await api.get(`/reports/${reportId}`, { params, responseType: 'blob' });
       const url = URL.createObjectURL(new Blob([resp.data]));
@@ -298,7 +307,7 @@ function ReportViewer({ reportId, report, onBack }) {
     } finally {
       setExporting(null);
     }
-  }, [reportId, dateFrom, dateTo, status, client, currency, groupBy, report]);
+  }, [reportId, dateFrom, dateTo, status, client, currency, fromBank, toBank, auditUser, groupBy, report]);
 
   const handleSort = useCallback((key) => {
     setSortDir(prev => sortKey === key ? (prev === 'asc' ? 'desc' : 'asc') : 'asc');
@@ -400,6 +409,36 @@ function ReportViewer({ reportId, report, onBack }) {
               <Label className="text-[10px] text-gray-500 uppercase mb-1 block">Currency</Label>
               <Input placeholder="e.g. USD" value={currency} onChange={e => setCurrency(e.target.value)}
                 className="h-8 text-xs bg-white" data-testid="filter-currency" />
+            </div>
+          )}
+          {report.filters.includes('fromBank') && (
+            <div className="w-[130px]">
+              <Label className="text-[10px] text-gray-500 uppercase mb-1 block">From Bank</Label>
+              <div className="relative">
+                <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-400" />
+                <Input placeholder="Search..." value={fromBank} onChange={e => setFromBank(e.target.value)}
+                  className="h-8 text-xs pl-7 bg-white" data-testid="filter-from-bank" />
+              </div>
+            </div>
+          )}
+          {report.filters.includes('toBank') && (
+            <div className="w-[130px]">
+              <Label className="text-[10px] text-gray-500 uppercase mb-1 block">To Bank</Label>
+              <div className="relative">
+                <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-400" />
+                <Input placeholder="Search..." value={toBank} onChange={e => setToBank(e.target.value)}
+                  className="h-8 text-xs pl-7 bg-white" data-testid="filter-to-bank" />
+              </div>
+            </div>
+          )}
+          {report.filters.includes('auditUser') && (
+            <div className="w-[150px]">
+              <Label className="text-[10px] text-gray-500 uppercase mb-1 block">User</Label>
+              <div className="relative">
+                <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-400" />
+                <Input placeholder="Search user..." value={auditUser} onChange={e => setAuditUser(e.target.value)}
+                  className="h-8 text-xs pl-7 bg-white" data-testid="filter-audit-user" />
+              </div>
             </div>
           )}
           {report.filters.includes('groupBy') && (

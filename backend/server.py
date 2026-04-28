@@ -1066,6 +1066,8 @@ async def report_settlement(
     fmt: str = Query("csv", alias="format"),
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
+    from_bank: Optional[str] = Query(None),
+    to_bank: Optional[str] = Query(None),
     user=Depends(get_current_user)
 ):
     await _check_report_access("settlement", user)
@@ -1074,6 +1076,10 @@ async def report_settlement(
         query.setdefault("value_date", {})["$gte"] = date_from
     if date_to:
         query.setdefault("value_date", {})["$lte"] = date_to
+    if from_bank:
+        query["from_bank"] = {"$regex": from_bank, "$options": "i"}
+    if to_bank:
+        query["to_bank"] = {"$regex": to_bank, "$options": "i"}
     deals = await _get_deals_for_report(query, user)
     # Sort by value date
     deals.sort(key=lambda d: d.get("value_date", ""))
@@ -1136,6 +1142,7 @@ async def report_audit_trail(
     fmt: str = Query("csv", alias="format"),
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
+    user_name: Optional[str] = Query(None),
     user=Depends(get_current_user)
 ):
     await _check_report_access("audit-trail", user)
@@ -1144,6 +1151,8 @@ async def report_audit_trail(
         query.setdefault("created_at", {})["$gte"] = date_from
     if date_to:
         query.setdefault("created_at", {})["$lte"] = date_to + "T23:59:59"
+    if user_name:
+        query["user_name"] = {"$regex": user_name, "$options": "i"}
     logs = await db.audit_logs.find(query, {"_id": 0}).sort("created_at", -1).to_list(50000)
     dr = _date_range_label(date_from, date_to)
     if fmt == "json":
@@ -1267,6 +1276,7 @@ async def report_client_activity(
     fmt: str = Query("csv", alias="format"),
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
+    client: Optional[str] = Query(None),
     user=Depends(get_current_user)
 ):
     await _check_report_access("client-activity", user)
@@ -1277,6 +1287,8 @@ async def report_client_activity(
         query.setdefault("deal_date", {})["$gte"] = date_from
     if date_to:
         query.setdefault("deal_date", {})["$lte"] = date_to
+    if client:
+        query["client_name"] = {"$regex": client, "$options": "i"}
     deals = await db.deals.find(query, {"_id": 0}).to_list(50000)
     # Group by client
     clients = {}
