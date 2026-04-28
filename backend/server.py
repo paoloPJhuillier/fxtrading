@@ -1004,11 +1004,25 @@ async def update_report_permissions(req: dict, user=Depends(get_current_user)):
 # --- Reports ---
 from services import reports as rpt
 
-async def _get_deals_for_report(query, user):
-    """Shared query builder for report endpoints."""
+async def _get_deals_for_report(query, user, sort_field="created_at", sort_dir=-1, page=None, limit=None):
+    """Shared query builder for report endpoints. Supports pagination."""
     if user["role"] == "trader":
         query["created_by"] = user["id"]
-    return await db.deals.find(query, {"_id": 0}).sort("created_at", -1).to_list(50000)
+    if page and limit:
+        total = await db.deals.count_documents(query)
+        skip = (page - 1) * limit
+        rows = await db.deals.find(query, {"_id": 0}).sort(sort_field, sort_dir).skip(skip).limit(limit).to_list(limit)
+        return rows, total
+    return await db.deals.find(query, {"_id": 0}).sort(sort_field, sort_dir).to_list(100000), None
+
+async def _get_logs_for_report(query, sort_field="created_at", sort_dir=-1, page=None, limit=None):
+    """Shared query builder for audit log reports. Supports pagination."""
+    if page and limit:
+        total = await db.audit_logs.count_documents(query)
+        skip = (page - 1) * limit
+        rows = await db.audit_logs.find(query, {"_id": 0}).sort(sort_field, sort_dir).skip(skip).limit(limit).to_list(limit)
+        return rows, total
+    return await db.audit_logs.find(query, {"_id": 0}).sort(sort_field, sort_dir).to_list(100000), None
 
 def _date_range_label(date_from, date_to):
     f = date_from or "All"
@@ -1023,6 +1037,10 @@ async def report_deal_blotter(
     status_filter: Optional[str] = Query(None, alias="status"),
     client: Optional[str] = Query(None),
     currency: Optional[str] = Query(None),
+    page: int = Query(1, ge=1),
+    limit: int = Query(50, ge=1, le=500),
+    sort_by: Optional[str] = Query(None),
+    sort_dir: Optional[str] = Query(None),
     user=Depends(get_current_user)
 ):
     await _check_report_access("deal-blotter", user)
@@ -1037,9 +1055,11 @@ async def report_deal_blotter(
         query.setdefault("deal_date", {})["$gte"] = date_from
     if date_to:
         query.setdefault("deal_date", {})["$lte"] = date_to
-    deals = await _get_deals_for_report(query, user)
+    sf = sort_by or "created_at"
+    sd = -1 if (sort_dir or "desc") == "desc" else 1
     dr = _date_range_label(date_from, date_to)
     if fmt == "json":
+        deals, total = await _get_deals_for_report(dict(query), user, sf, sd, page, limit)
         rows = []
         for d in deals:
             rows.append({
@@ -1052,7 +1072,9 @@ async def report_deal_blotter(
                 "created_by_name": d.get("created_by_name", ""), "processed_by_name": d.get("processed_by_name", ""),
                 "remarks": d.get("remarks", ""),
             })
-        return {"rows": rows, "total": len(rows)}
+        return {"rows": rows, "total": total, "page": page, "pages": (total + limit - 1) // limit if total > 0 else 1}
+    # CSV/PDF: fetch all (no pagination)
+    deals, _ = await _get_deals_for_report(dict(query), user, sf, sd)
     if fmt == "pdf":
         buf = rpt.deal_blotter_pdf(deals, dr)
         return Response(content=buf.read(), media_type="application/pdf",
@@ -1068,6 +1090,10 @@ async def report_settlement(
     date_to: Optional[str] = Query(None),
     from_bank: Optional[str] = Query(None),
     to_bank: Optional[str] = Query(None),
+    page: int = Query(1, ge=1),
+    limit: int = Query(50, ge=1, le=500),
+    sort_by: Optional[str] = Query(None),
+    sort_dir: Optional[str] = Query(None),
     user=Depends(get_current_user)
 ):
     await _check_report_access("settlement", user)
@@ -1080,11 +1106,11 @@ async def report_settlement(
         query["from_bank"] = {"$regex": from_bank, "$options": "i"}
     if to_bank:
         query["to_bank"] = {"$regex": to_bank, "$options": "i"}
-    deals = await _get_deals_for_report(query, user)
-    # Sort by value date
-    deals.sort(key=lambda d: d.get("value_date", ""))
+    sf = sort_by or "value_date"
+    sd = 1 if (sort_dir or "asc") == "asc" else -1
     dr = _date_range_label(date_from, date_to)
     if fmt == "json":
+        deals, total = await _get_deals_for_report(dict(query), user, sf, sd, page, limit)
         rows = []
         for d in deals:
             rows.append({
@@ -1096,7 +1122,8 @@ async def report_settlement(
                 "to_account_num": d.get("to_account_num", ""),
                 "proofs": len(d.get("settlement_proofs", [])), "status": d.get("status", ""),
             })
-        return {"rows": rows, "total": len(rows)}
+        return {"rows": rows, "total": total, "page": page, "pages": (total + limit - 1) // limit if total > 0 else 1}
+    deals, _ = await _get_deals_for_report(dict(query), user, sf, sd)
     if fmt == "pdf":
         buf = rpt.settlement_pdf(deals, dr)
         return Response(content=buf.read(), media_type="application/pdf",
@@ -1112,7 +1139,7 @@ async def report_open_positions(
 ):
     await _check_report_access("open-positions", user)
     query = {"status": "pending"}
-    deals = await _get_deals_for_report(query, user)
+    deals, _ = await _get_deals_for_report(query, user)
     # Group by currency pair
     pairs = {}
     for d in deals:
@@ -1143,6 +1170,10 @@ async def report_audit_trail(
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
     user_name: Optional[str] = Query(None),
+    page: int = Query(1, ge=1),
+    limit: int = Query(50, ge=1, le=500),
+    sort_by: Optional[str] = Query(None),
+    sort_dir: Optional[str] = Query(None),
     user=Depends(get_current_user)
 ):
     await _check_report_access("audit-trail", user)
@@ -1153,9 +1184,11 @@ async def report_audit_trail(
         query.setdefault("created_at", {})["$lte"] = date_to + "T23:59:59"
     if user_name:
         query["user_name"] = {"$regex": user_name, "$options": "i"}
-    logs = await db.audit_logs.find(query, {"_id": 0}).sort("created_at", -1).to_list(50000)
+    sf = sort_by or "created_at"
+    sd = -1 if (sort_dir or "desc") == "desc" else 1
     dr = _date_range_label(date_from, date_to)
     if fmt == "json":
+        logs, total = await _get_logs_for_report(dict(query), sf, sd, page, limit)
         rows = []
         for l in logs:
             rows.append({
@@ -1164,7 +1197,8 @@ async def report_audit_trail(
                 "user_name": l.get("user_name", ""), "user_role": l.get("user_role", ""),
                 "details": l.get("details", ""),
             })
-        return {"rows": rows, "total": len(rows)}
+        return {"rows": rows, "total": total, "page": page, "pages": (total + limit - 1) // limit if total > 0 else 1}
+    logs, _ = await _get_logs_for_report(dict(query), sf, sd)
     if fmt == "pdf":
         buf = rpt.audit_trail_pdf(logs, dr)
         return Response(content=buf.read(), media_type="application/pdf",

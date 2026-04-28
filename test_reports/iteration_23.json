@@ -1,0 +1,44 @@
+{
+  "summary": "Iter 23 — Server-side pagination, sort and debounced search on row-level reports verified end-to-end. Backend pytest (test_reports_pagination.py): 16/16 PASS covering deal-blotter/settlement/audit-trail page+limit, page2 returns different rows, server-side sort_by=amount asc/desc, CSV+PDF still return full dataset (no pagination), settlement from_bank filter, audit-trail user_name filter, trader 403 on audit-trail, and aggregation reports (open-positions, volume-summary, client-activity, user-activity) confirmed to NOT return page/pages fields. Frontend Playwright on preview URL: pagination controls (First/Prev/Next/Last) render, Next loads new rows + sends page=2, sorting by Amount column resets to page=1 and sends sort_by=amount, 400ms debounce on Client filter (0 API calls during typing, exactly 1 call after 600ms), CSV/PDF buttons present, Settlement shows From/To Bank filters, Audit Trail (admin) shows User filter + pagination. Footer correctly shows '1-50 of 120 records / Page 1 of 3'. Found and fixed 1 critical regression: report_open_positions did not unpack new (rows, total) tuple from _get_deals_for_report -> 500 AttributeError. Old test_reports.py has 2 obsolete assertions (total==len(rows)) broken by intentional pagination change — not a defect, needs main agent to refresh those legacy assertions.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/reports/deal-blotter, /api/reports/audit-trail (json)", "issue": "Legacy assertions in /app/backend/tests/test_reports.py::TestJsonFormat (test_deal_blotter_json, test_audit_trail_json_admin) check total==len(rows). With new default page=1/limit=50 pagination this is no longer valid (e.g., total=120 vs 50 rows). Update these two assertions to len(rows) <= limit and len(rows) <= total."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_reports_pagination.py",
+    "/app/test_reports/pytest/iter23_pagination.xml"
+  ],
+  "action_items": [
+    "Refresh /app/backend/tests/test_reports.py::TestJsonFormat assertions to account for default pagination (total >= len(rows), len(rows) <= limit) instead of total == len(rows)."
+  ],
+  "critical_code_review_comments": [
+    "FIXED IN THIS RUN — server.py L1142 report_open_positions used `deals = await _get_deals_for_report(query, user)` while the helper now returns a (rows, total) tuple, producing a 500 AttributeError on every JSON/CSV/PDF call to /api/reports/open-positions. Patched to `deals, _ = await _get_deals_for_report(query, user)`. Recommend adding a unit test asserting open-positions returns 200 (now in test_reports_pagination.py).",
+    "_get_deals_for_report is the only helper, but the signature changed silently to return a tuple. Returning a tuple unconditionally is a foot-gun (open-positions regression proves it). Consider always returning a NamedTuple or a small dataclass `ReportPage(rows, total)` so call sites read `result.rows` and stay correct even when total is unused.",
+    "Aggregation endpoints (volume-summary, client-activity, user-activity, open-positions) still pull up to 50,000 deals/logs into memory with `.to_list(50000)` then aggregate in Python. As volume grows this will OOM the worker. These aggregations should move to MongoDB `$group` pipelines.",
+    "ReportsPage.jsx PAGINATED_REPORTS is hard-coded at the frontend (line 237). If a new row-level report is added on backend with pagination, two places must be edited. Better: have the backend echo `paginated: true` in the JSON response and let the FE branch on that flag.",
+    "Default limit on backend is 50 (cap 500); FE never sends `limit`, so users always see 50/page with no UI to change page size. Consider exposing a 'rows per page' dropdown for power users.",
+    "Sort header on FE only sends sort_by/sort_dir; backend whitelists no fields and passes the raw string into Mongo .sort(). A malicious user could sort by an unindexed huge field and hit slow queries. Add a server-side allowlist of sortable columns per report.",
+    "useDebounce custom hook re-creates a setTimeout on every keystroke (correct) but if the same value is re-typed (Test→Tes→Test) it still triggers a fresh fetch because debouncedValue ref-changes. Acceptable for now, but worth a memo guard if perf matters."
+  ],
+  "updated_files": [
+    "/app/backend/server.py (L1142 — fixed tuple unpacking regression in report_open_positions)",
+    "/app/backend/tests/test_reports_pagination.py (new — 16 tests)"
+  ],
+  "success_rate": {
+    "backend": "100% (16/16 new pagination tests; legacy test_reports.py 43/45 — 2 failures are obsolete assertions, not defects)",
+    "frontend": "100% (8/8 functional checks: pagination controls, page change, server-side sort, debounce, exports, settlement filters, audit user filter, audit pagination)"
+  },
+  "test_credentials": "admin@fxtracker.com/Admin@123, trader@fxtracker.com/Trader@123 — verified",
+  "seed_data_creation": "None — relies on existing 59 deals + 120 audit logs in DB",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Pagination feature stable. Use test_reports_pagination.py for regression. Selectors confirmed: page-first/prev/next/last, sort-{column}, filter-client/currency/from-bank/to-bank/audit-user, report-export-csv/pdf, report-table, report-row-count. JSON pagination response shape: {rows, total, page, pages}. CSV/PDF unchanged (full dataset). Aggregation reports (open-positions, volume-summary, client-activity, user-activity) return {rows, total} only — no page/pages.",
+  "rca of the issue": "open-positions 500: refactor of _get_deals_for_report changed return type from List[dict] to Tuple[List[dict], Optional[int]]. Three of four callers were updated; line 1142 in report_open_positions was missed. When code iterated the tuple, the loop var `d` became the list itself, hitting AttributeError on d.get(). Fix: unpack as `deals, _ = await _get_deals_for_report(...)`. Verified by adding test_open_positions_snapshot which now PASSes."
+}

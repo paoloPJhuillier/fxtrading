@@ -222,29 +222,80 @@ function ReportSelector({ reports, onSelect, isAdmin, onOpenSettings }) {
   );
 }
 
+// ── Debounce hook ───────────────────────────────────────────────────────────
+
+function useDebounce(value, delay = 400) {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(value), delay);
+    return () => clearTimeout(t);
+  }, [value, delay]);
+  return debounced;
+}
+
+// ── Paginated reports (row-level data that grows with transactions) ─────────
+const PAGINATED_REPORTS = new Set(['deal-blotter', 'settlement', 'audit-trail']);
+
 // ── Report Viewer (Table + Filters + Export) ────────────────────────────────
 
 function ReportViewer({ reportId, report, onBack }) {
   const [rows, setRows] = useState([]);
   const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [pageSize] = useState(50);
+  const [pages, setPages] = useState(1);
   const [loading, setLoading] = useState(false);
   const [exporting, setExporting] = useState(null);
   const ytd = getYTDRange();
   const [dateFrom, setDateFrom] = useState(report.filters.includes('dateRange') ? ytd.from : '');
   const [dateTo, setDateTo] = useState(report.filters.includes('dateRange') ? ytd.to : '');
   const [status, setStatus] = useState('');
-  const [client, setClient] = useState('');
-  const [currency, setCurrency] = useState('');
-  const [fromBank, setFromBank] = useState('');
-  const [toBank, setToBank] = useState('');
-  const [auditUser, setAuditUser] = useState('');
+  const [clientRaw, setClientRaw] = useState('');
+  const [currencyRaw, setCurrencyRaw] = useState('');
+  const [fromBankRaw, setFromBankRaw] = useState('');
+  const [toBankRaw, setToBankRaw] = useState('');
+  const [auditUserRaw, setAuditUserRaw] = useState('');
   const [groupBy, setGroupBy] = useState('daily');
   const [sortKey, setSortKey] = useState(null);
-  const [sortDir, setSortDir] = useState('asc');
+  const [sortDir, setSortDir] = useState('desc');
   const abortRef = useRef(null);
 
+  // Debounce text search inputs (400ms)
+  const client = useDebounce(clientRaw);
+  const currency = useDebounce(currencyRaw);
+  const fromBank = useDebounce(fromBankRaw);
+  const toBank = useDebounce(toBankRaw);
+  const auditUser = useDebounce(auditUserRaw);
+
+  const isPaginated = PAGINATED_REPORTS.has(reportId);
   const hasFilters = report.filters.length > 0;
   const Icon = report.icon;
+
+  // Reset to page 1 when filters change
+  useEffect(() => { setPage(1); }, [dateFrom, dateTo, status, client, currency, fromBank, toBank, auditUser, groupBy]);
+
+  const buildParams = useCallback((format, forExport = false) => {
+    const params = { format };
+    if (dateFrom) params.date_from = dateFrom;
+    if (dateTo) params.date_to = dateTo;
+    if (status && status !== 'all_statuses' && report.filters.includes('status')) params.status = status;
+    if (client && report.filters.includes('client')) params.client = client;
+    if (currency && report.filters.includes('currency')) params.currency = currency;
+    if (fromBank && report.filters.includes('fromBank')) params.from_bank = fromBank;
+    if (toBank && report.filters.includes('toBank')) params.to_bank = toBank;
+    if (auditUser && report.filters.includes('auditUser')) params.user_name = auditUser;
+    if (report.filters.includes('groupBy')) params.group_by = groupBy;
+    // Pagination + server sort only for JSON on paginated reports
+    if (format === 'json' && isPaginated && !forExport) {
+      params.page = page;
+      params.limit = pageSize;
+      if (sortKey) {
+        params.sort_by = sortKey;
+        params.sort_dir = sortDir;
+      }
+    }
+    return params;
+  }, [dateFrom, dateTo, status, client, currency, fromBank, toBank, auditUser, groupBy, page, pageSize, sortKey, sortDir, report, isPaginated]);
 
   const fetchData = useCallback(async () => {
     if (abortRef.current) abortRef.current.abort();
@@ -252,19 +303,11 @@ function ReportViewer({ reportId, report, onBack }) {
     abortRef.current = controller;
     setLoading(true);
     try {
-      const params = { format: 'json' };
-      if (dateFrom) params.date_from = dateFrom;
-      if (dateTo) params.date_to = dateTo;
-      if (status && status !== 'all_statuses' && report.filters.includes('status')) params.status = status;
-      if (client && report.filters.includes('client')) params.client = client;
-      if (currency && report.filters.includes('currency')) params.currency = currency;
-      if (fromBank && report.filters.includes('fromBank')) params.from_bank = fromBank;
-      if (toBank && report.filters.includes('toBank')) params.to_bank = toBank;
-      if (auditUser && report.filters.includes('auditUser')) params.user_name = auditUser;
-      if (report.filters.includes('groupBy')) params.group_by = groupBy;
+      const params = buildParams('json');
       const { data } = await api.get(`/reports/${reportId}`, { params, signal: controller.signal });
       setRows(data.rows || []);
-      setTotal(data.total || 0);
+      setTotal(data.total || data.rows?.length || 0);
+      setPages(data.pages || 1);
     } catch (err) {
       if (err.name !== 'CanceledError' && err.code !== 'ERR_CANCELED') {
         toast.error('Failed to load report data');
@@ -272,7 +315,7 @@ function ReportViewer({ reportId, report, onBack }) {
     } finally {
       setLoading(false);
     }
-  }, [reportId, dateFrom, dateTo, status, client, currency, fromBank, toBank, auditUser, groupBy, report]);
+  }, [reportId, buildParams]);
 
   useEffect(() => {
     fetchData();
@@ -282,16 +325,7 @@ function ReportViewer({ reportId, report, onBack }) {
   const handleExport = useCallback(async (format) => {
     setExporting(format);
     try {
-      const params = { format };
-      if (dateFrom) params.date_from = dateFrom;
-      if (dateTo) params.date_to = dateTo;
-      if (status && status !== 'all_statuses' && report.filters.includes('status')) params.status = status;
-      if (client && report.filters.includes('client')) params.client = client;
-      if (currency && report.filters.includes('currency')) params.currency = currency;
-      if (fromBank && report.filters.includes('fromBank')) params.from_bank = fromBank;
-      if (toBank && report.filters.includes('toBank')) params.to_bank = toBank;
-      if (auditUser && report.filters.includes('auditUser')) params.user_name = auditUser;
-      if (report.filters.includes('groupBy')) params.group_by = groupBy;
+      const params = buildParams(format, true);
       const resp = await api.get(`/reports/${reportId}`, { params, responseType: 'blob' });
       const url = URL.createObjectURL(new Blob([resp.data]));
       const a = document.createElement('a');
@@ -307,14 +341,23 @@ function ReportViewer({ reportId, report, onBack }) {
     } finally {
       setExporting(null);
     }
-  }, [reportId, dateFrom, dateTo, status, client, currency, fromBank, toBank, auditUser, groupBy, report]);
+  }, [reportId, buildParams]);
 
   const handleSort = useCallback((key) => {
-    setSortDir(prev => sortKey === key ? (prev === 'asc' ? 'desc' : 'asc') : 'asc');
-    setSortKey(key);
-  }, [sortKey]);
+    if (isPaginated) {
+      // Server-side sort: update sort params and reset to page 1
+      setSortDir(prev => sortKey === key ? (prev === 'asc' ? 'desc' : 'asc') : 'desc');
+      setSortKey(key);
+      setPage(1);
+    } else {
+      // Client-side sort for aggregation reports
+      setSortDir(prev => sortKey === key ? (prev === 'asc' ? 'desc' : 'asc') : 'desc');
+      setSortKey(key);
+    }
+  }, [sortKey, isPaginated]);
 
-  const sortedRows = sortKey
+  // Client-side sort only for non-paginated (aggregation) reports
+  const displayRows = (!isPaginated && sortKey)
     ? [...rows].sort((a, b) => {
         const col = report.columns.find(c => c.key === sortKey);
         let va = a[sortKey], vb = b[sortKey];
@@ -399,7 +442,7 @@ function ReportViewer({ reportId, report, onBack }) {
               <Label className="text-[10px] text-gray-500 uppercase mb-1 block">Client</Label>
               <div className="relative">
                 <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-400" />
-                <Input placeholder="Search..." value={client} onChange={e => setClient(e.target.value)}
+                <Input placeholder="Search..." value={clientRaw} onChange={e => setClientRaw(e.target.value)}
                   className="h-8 text-xs pl-7 bg-white" data-testid="filter-client" />
               </div>
             </div>
@@ -407,7 +450,7 @@ function ReportViewer({ reportId, report, onBack }) {
           {report.filters.includes('currency') && (
             <div className="w-[100px]">
               <Label className="text-[10px] text-gray-500 uppercase mb-1 block">Currency</Label>
-              <Input placeholder="e.g. USD" value={currency} onChange={e => setCurrency(e.target.value)}
+              <Input placeholder="e.g. USD" value={currencyRaw} onChange={e => setCurrencyRaw(e.target.value)}
                 className="h-8 text-xs bg-white" data-testid="filter-currency" />
             </div>
           )}
@@ -416,7 +459,7 @@ function ReportViewer({ reportId, report, onBack }) {
               <Label className="text-[10px] text-gray-500 uppercase mb-1 block">From Bank</Label>
               <div className="relative">
                 <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-400" />
-                <Input placeholder="Search..." value={fromBank} onChange={e => setFromBank(e.target.value)}
+                <Input placeholder="Search..." value={fromBankRaw} onChange={e => setFromBankRaw(e.target.value)}
                   className="h-8 text-xs pl-7 bg-white" data-testid="filter-from-bank" />
               </div>
             </div>
@@ -426,7 +469,7 @@ function ReportViewer({ reportId, report, onBack }) {
               <Label className="text-[10px] text-gray-500 uppercase mb-1 block">To Bank</Label>
               <div className="relative">
                 <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-400" />
-                <Input placeholder="Search..." value={toBank} onChange={e => setToBank(e.target.value)}
+                <Input placeholder="Search..." value={toBankRaw} onChange={e => setToBankRaw(e.target.value)}
                   className="h-8 text-xs pl-7 bg-white" data-testid="filter-to-bank" />
               </div>
             </div>
@@ -436,7 +479,7 @@ function ReportViewer({ reportId, report, onBack }) {
               <Label className="text-[10px] text-gray-500 uppercase mb-1 block">User</Label>
               <div className="relative">
                 <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-400" />
-                <Input placeholder="Search user..." value={auditUser} onChange={e => setAuditUser(e.target.value)}
+                <Input placeholder="Search user..." value={auditUserRaw} onChange={e => setAuditUserRaw(e.target.value)}
                   className="h-8 text-xs pl-7 bg-white" data-testid="filter-audit-user" />
               </div>
             </div>
@@ -489,14 +532,14 @@ function ReportViewer({ reportId, report, onBack }) {
                     Loading report data...
                   </td>
                 </tr>
-              ) : sortedRows.length === 0 ? (
+              ) : displayRows.length === 0 ? (
                 <tr>
                   <td colSpan={report.columns.length} className="text-center py-16 text-gray-400">
                     No data found for the selected filters
                   </td>
                 </tr>
               ) : (
-                sortedRows.map((row, i) => (
+                displayRows.map((row, i) => (
                   <tr key={i} className={`border-t border-gray-100 hover:bg-[#518dca]/5 transition-colors ${i % 2 === 1 ? 'bg-[#f1f2f2]/40' : ''}`}>
                     {report.columns.map(col => {
                       const val = row[col.key];
@@ -514,11 +557,38 @@ function ReportViewer({ reportId, report, onBack }) {
             </tbody>
           </table>
         </div>
-        {/* Footer summary */}
-        {!loading && sortedRows.length > 0 && (
+        {/* Footer with pagination */}
+        {!loading && displayRows.length > 0 && (
           <div className="px-3 py-2 bg-[#f1f2f2]/60 border-t border-gray-200 flex items-center justify-between text-[10px] text-gray-500">
-            <span>Showing {sortedRows.length} of {total} records</span>
-            <span>Report generated: {new Date().toLocaleString()}</span>
+            <span>
+              {isPaginated
+                ? `Showing ${(page - 1) * pageSize + 1}-${Math.min(page * pageSize, total)} of ${total.toLocaleString()} records`
+                : `Showing ${displayRows.length} of ${total} records`}
+            </span>
+            {isPaginated && pages > 1 && (
+              <div className="flex items-center gap-1">
+                <Button variant="ghost" size="sm" className="h-6 px-2 text-[10px]"
+                  disabled={page <= 1} onClick={() => setPage(1)} data-testid="page-first">
+                  First
+                </Button>
+                <Button variant="ghost" size="sm" className="h-6 px-2 text-[10px]"
+                  disabled={page <= 1} onClick={() => setPage(p => p - 1)} data-testid="page-prev">
+                  Prev
+                </Button>
+                <span className="px-2 text-[11px] font-medium text-[#08263e]">
+                  Page {page} of {pages}
+                </span>
+                <Button variant="ghost" size="sm" className="h-6 px-2 text-[10px]"
+                  disabled={page >= pages} onClick={() => setPage(p => p + 1)} data-testid="page-next">
+                  Next
+                </Button>
+                <Button variant="ghost" size="sm" className="h-6 px-2 text-[10px]"
+                  disabled={page >= pages} onClick={() => setPage(pages)} data-testid="page-last">
+                  Last
+                </Button>
+              </div>
+            )}
+            <span>{new Date().toLocaleString()}</span>
           </div>
         )}
       </div>
