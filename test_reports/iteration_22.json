@@ -1,0 +1,36 @@
+{
+  "summary": "Iter 22 — Report Permissions + YTD defaults fully verified. Backend: 15 new pytest (test_report_permissions.py) all PASS covering GET/PUT /api/reports/permissions, admin-only update, role-scoped GET response, toggle->403->re-enable round trip, empty-body 400, and default matrix access on all 7 report endpoints. Existing reports suite (test_reports.py) 30/30 still PASS. Frontend (live Playwright on preview URL): admin=7 cards + Permissions button; dialog shows 7×3 switch matrix; toggle deal-blotter trader OFF->save->persisted in DB->trader gets 403 on /api/reports/deal-blotter while admin stays 200->restore saves defaults; YTD dates (2026-01-01 .. 2026-04-28) correctly pre-filled on Deal Blotter, Settlement, Volume Summary; Open Positions has NO date filter (snapshot); CSV+PDF exports for admin and trader return 200 (no 401 regression); trader sees exactly 5 cards (no audit-trail/user-activity) and no Permissions button. Defaults restored at end of run.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_report_permissions.py",
+    "/app/backend/tests/test_reports.py",
+    "/app/test_reports/pytest/iter22_permissions.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py _get_report_permissions() re-reads DB on every _check_report_access() call (one DB roundtrip per report request). Low-volume today but consider a small TTL cache keyed on a version counter to avoid per-request IO once traffic scales.",
+    "server.py _check_report_access(): if a new report_id is added to endpoints but missing from DEFAULT_REPORT_PERMISSIONS/DB doc, the function returns perms.get(report_id, {}) -> access denied for everyone including admin. Consider defaulting unknown report_ids to admin:True or raising a clearer 500 'report_id not registered' error.",
+    "PUT /api/reports/permissions: audit log message is the same generic 'Updated report permissions' regardless of which toggles changed. Including the diff (or at least the affected report_ids) in log_audit detail would materially help forensics.",
+    "PermissionsDialog (ReportsPage.jsx L558): admin switch for audit-trail is disabled (good guard) but the same guardrail is NOT enforced server-side. An admin could POST {permissions:{'audit-trail':{'admin':false}}} and lock everyone out of audit-trail. Add a server-side invariant: audit-trail.admin must remain true.",
+    "PermissionsDialog fetches /reports/permissions but has no error state — if the GET fails the dialog stays on the spinner forever. Add a catch that toasts and closes the dialog.",
+    "getYTDRange() uses toISOString().slice(0,10) which converts to UTC; near midnight in negative-UTC timezones this would render tomorrow's date as 'to' and affect the from year. For an internal FX tool this is acceptable but worth a comment."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_report_permissions.py"
+  ],
+  "success_rate": {
+    "backend": "100% (45/45 — 15 new + 30 existing)",
+    "frontend": "100% (16/16 functional checks across admin and trader)"
+  },
+  "test_credentials": "admin@fxtracker.com/Admin@123, trader@fxtracker.com/Trader@123, treasury@fxtracker.com/Treasury@123 — all verified",
+  "seed_data_creation": "None — permissions module auto-seeds from DEFAULT_REPORT_PERMISSIONS on first read; test fixture restores defaults before and after the module.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Reports permissions + YTD feature is stable. DEFAULT state: audit-trail/user-activity OFF for trader/treasury, everything else ON. Tests in /app/backend/tests/test_report_permissions.py include a module-scoped fixture that restores defaults — safe to re-run repeatedly. UI selectors: report-settings-btn, permissions-dialog, perm-{rid}-{role} (21 switches), perm-save-btn, report-select-{rid}, report-view-{rid}, filter-date-from, filter-date-to.",
+  "rca of the issue": "N/A — no defects found."
+}

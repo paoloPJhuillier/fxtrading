@@ -942,6 +942,65 @@ async def root():
     return {"message": "FX Trading Tracker API"}
 
 
+# --- Report Permissions ---
+DEFAULT_REPORT_PERMISSIONS = {
+    "deal-blotter": {"trader": True, "treasury": True, "admin": True},
+    "settlement": {"trader": True, "treasury": True, "admin": True},
+    "open-positions": {"trader": True, "treasury": True, "admin": True},
+    "audit-trail": {"trader": False, "treasury": False, "admin": True},
+    "user-activity": {"trader": False, "treasury": False, "admin": True},
+    "volume-summary": {"trader": True, "treasury": True, "admin": True},
+    "client-activity": {"trader": True, "treasury": True, "admin": True},
+}
+
+async def _get_report_permissions():
+    """Get report permissions from DB, falling back to defaults."""
+    doc = await db.report_permissions.find_one({"id": "global"}, {"_id": 0})
+    if doc and "permissions" in doc:
+        return doc["permissions"]
+    return DEFAULT_REPORT_PERMISSIONS
+
+async def _check_report_access(report_id: str, user: dict):
+    """Check if user's role has access to a specific report."""
+    perms = await _get_report_permissions()
+    report_perms = perms.get(report_id, {})
+    if not report_perms.get(user["role"], False):
+        raise HTTPException(status_code=403, detail=f"Report '{report_id}' is not enabled for your role")
+
+@api_router.get("/reports/permissions")
+async def get_report_permissions(user=Depends(get_current_user)):
+    """Get report permissions for the current user's role (or all if admin)."""
+    perms = await _get_report_permissions()
+    if user["role"] == "admin":
+        return {"permissions": perms}
+    # Non-admin: return only their own enabled reports
+    role = user["role"]
+    enabled = {rid: rp.get(role, False) for rid, rp in perms.items()}
+    return {"permissions": {rid: {role: v} for rid, v in enabled.items()}}
+
+@api_router.put("/reports/permissions")
+async def update_report_permissions(req: dict, user=Depends(get_current_user)):
+    """Admin updates report permissions. Body: {permissions: {report_id: {role: bool}}}"""
+    await require_role(user, ["admin"])
+    new_perms = req.get("permissions", {})
+    if not new_perms:
+        raise HTTPException(status_code=400, detail="No permissions provided")
+    # Merge with existing
+    current = await _get_report_permissions()
+    for report_id, roles in new_perms.items():
+        if report_id in current:
+            for role, enabled in roles.items():
+                if role in ("trader", "treasury", "admin"):
+                    current[report_id][role] = bool(enabled)
+    await db.report_permissions.update_one(
+        {"id": "global"},
+        {"$set": {"permissions": current, "updated_at": datetime.now(timezone.utc).isoformat(), "updated_by": user_full_name(user)}},
+        upsert=True
+    )
+    await log_audit("report_permissions_updated", user, "settings", "global", "", f"Updated report permissions")
+    return {"permissions": current}
+
+
 # --- Reports ---
 from services import reports as rpt
 
@@ -966,6 +1025,7 @@ async def report_deal_blotter(
     currency: Optional[str] = Query(None),
     user=Depends(get_current_user)
 ):
+    await _check_report_access("deal-blotter", user)
     query = {}
     if status_filter:
         query["status"] = status_filter
@@ -1008,6 +1068,7 @@ async def report_settlement(
     date_to: Optional[str] = Query(None),
     user=Depends(get_current_user)
 ):
+    await _check_report_access("settlement", user)
     query = {"$or": [{"status": "confirmed"}, {"status": "pending"}]}
     if date_from:
         query.setdefault("value_date", {})["$gte"] = date_from
@@ -1043,6 +1104,7 @@ async def report_open_positions(
     fmt: str = Query("csv", alias="format"),
     user=Depends(get_current_user)
 ):
+    await _check_report_access("open-positions", user)
     query = {"status": "pending"}
     deals = await _get_deals_for_report(query, user)
     # Group by currency pair
@@ -1076,7 +1138,7 @@ async def report_audit_trail(
     date_to: Optional[str] = Query(None),
     user=Depends(get_current_user)
 ):
-    await require_role(user, ["admin"])
+    await _check_report_access("audit-trail", user)
     query = {}
     if date_from:
         query.setdefault("created_at", {})["$gte"] = date_from
@@ -1109,7 +1171,7 @@ async def report_user_activity(
     date_to: Optional[str] = Query(None),
     user=Depends(get_current_user)
 ):
-    await require_role(user, ["admin"])
+    await _check_report_access("user-activity", user)
     query = {}
     if date_from:
         query.setdefault("created_at", {})["$gte"] = date_from
@@ -1154,6 +1216,7 @@ async def report_volume_summary(
     group_by: str = Query("daily"),
     user=Depends(get_current_user)
 ):
+    await _check_report_access("volume-summary", user)
     query = {}
     if user["role"] == "trader":
         query["created_by"] = user["id"]
@@ -1206,6 +1269,7 @@ async def report_client_activity(
     date_to: Optional[str] = Query(None),
     user=Depends(get_current_user)
 ):
+    await _check_report_access("client-activity", user)
     query = {}
     if user["role"] == "trader":
         query["created_by"] = user["id"]

@@ -23,16 +23,17 @@ logger = logging.getLogger(__name__)
 # -- Scope/Collection mapping (Couchbase best practice) --
 # Maps MongoDB collection names → (scope, collection) in Couchbase
 SCOPE_MAP = {
-    "users":             ("identity",  "users"),
-    "deals":             ("trading",   "deals"),
-    "counters":          ("trading",   "deal_counters"),
-    "audit_logs":        ("audit",     "audit_logs"),
-    "companies":         ("reference", "companies"),
-    "banks":             ("reference", "banks"),
-    "bank_accounts":     ("reference", "bank_accounts"),
-    "currencies":        ("reference", "currencies"),
-    "transaction_types": ("reference", "transaction_types"),
-    "transfer_types":    ("reference", "transfer_types"),
+    "users":              ("identity",  "users"),
+    "deals":              ("trading",   "deals"),
+    "counters":           ("trading",   "deal_counters"),
+    "audit_logs":         ("audit",     "audit_logs"),
+    "companies":          ("reference", "companies"),
+    "banks":              ("reference", "banks"),
+    "bank_accounts":      ("reference", "bank_accounts"),
+    "currencies":         ("reference", "currencies"),
+    "transaction_types":  ("reference", "transaction_types"),
+    "transfer_types":     ("reference", "transfer_types"),
+    "report_permissions": ("reference", "report_permissions"),
 }
 
 ALL_SCOPES = sorted({scope for scope, _ in SCOPE_MAP.values()})

@@ -5,9 +5,11 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import {
   FileText, Download, FileSpreadsheet, Loader2, Shield, BarChart3,
-  Users, Clock, TrendingUp, Briefcase, ChevronLeft, Search, ArrowUpDown
+  Users, Clock, TrendingUp, Briefcase, ChevronLeft, Search, ArrowUpDown, Settings
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -144,6 +146,13 @@ const REPORTS = {
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
+function getYTDRange() {
+  const now = new Date();
+  const yearStart = `${now.getFullYear()}-01-01`;
+  const today = now.toISOString().slice(0, 10);
+  return { from: yearStart, to: today };
+}
+
 function fmtNum(v, decimals = 2) {
   if (v == null || v === '') return '';
   const n = Number(v);
@@ -167,12 +176,19 @@ function StatusBadge({ status }) {
 
 // ── Report Selector (Landing) ───────────────────────────────────────────────
 
-function ReportSelector({ reports, onSelect }) {
+function ReportSelector({ reports, onSelect, isAdmin, onOpenSettings }) {
   return (
     <div data-testid="reports-page">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-[#08263e]" style={{ fontFamily: 'Chivo, sans-serif' }}>Reports</h1>
-        <p className="text-sm text-gray-500 mt-1">Select a report to view data and export</p>
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-[#08263e]" style={{ fontFamily: 'Chivo, sans-serif' }}>Reports</h1>
+          <p className="text-sm text-gray-500 mt-1">Select a report to view data and export</p>
+        </div>
+        {isAdmin && (
+          <Button variant="outline" size="sm" onClick={onOpenSettings} className="gap-1.5 text-xs" data-testid="report-settings-btn">
+            <Settings className="h-3.5 w-3.5" /> Permissions
+          </Button>
+        )}
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
         {reports.map(([id, r]) => {
@@ -195,6 +211,13 @@ function ReportSelector({ reports, onSelect }) {
           );
         })}
       </div>
+      {reports.length === 0 && (
+        <div className="text-center py-16 text-gray-400">
+          <FileText className="h-10 w-10 mx-auto mb-3 opacity-40" />
+          <p className="text-sm">No reports are enabled for your role</p>
+          <p className="text-xs mt-1">Contact your administrator to request access</p>
+        </div>
+      )}
     </div>
   );
 }
@@ -206,8 +229,9 @@ function ReportViewer({ reportId, report, onBack }) {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
   const [exporting, setExporting] = useState(null);
-  const [dateFrom, setDateFrom] = useState('');
-  const [dateTo, setDateTo] = useState('');
+  const ytd = getYTDRange();
+  const [dateFrom, setDateFrom] = useState(report.filters.includes('dateRange') ? ytd.from : '');
+  const [dateTo, setDateTo] = useState(report.filters.includes('dateRange') ? ytd.to : '');
   const [status, setStatus] = useState('');
   const [client, setClient] = useState('');
   const [currency, setCurrency] = useState('');
@@ -463,14 +487,124 @@ function ReportViewer({ reportId, report, onBack }) {
   );
 }
 
+// ── Permissions Dialog (Admin) ───────────────────────────────────────────────
+
+const REPORT_LABELS = {
+  'deal-blotter': 'Deal Blotter',
+  'settlement': 'Settlement Report',
+  'open-positions': 'Open Positions',
+  'audit-trail': 'Transaction Audit Trail',
+  'user-activity': 'User Activity',
+  'volume-summary': 'Volume Summary',
+  'client-activity': 'Client Activity',
+};
+
+function PermissionsDialog({ open, onClose }) {
+  const [perms, setPerms] = useState(null);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (open) {
+      api.get('/reports/permissions').then(res => setPerms(res.data.permissions));
+    }
+  }, [open]);
+
+  const handleToggle = (reportId, role, value) => {
+    setPerms(prev => ({
+      ...prev,
+      [reportId]: { ...prev[reportId], [role]: value },
+    }));
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await api.put('/reports/permissions', { permissions: perms });
+      toast.success('Report permissions saved');
+      onClose();
+    } catch {
+      toast.error('Failed to save permissions');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent className="max-w-lg" data-testid="permissions-dialog">
+        <DialogHeader>
+          <DialogTitle className="text-[#08263e]">Report Permissions</DialogTitle>
+        </DialogHeader>
+        <p className="text-xs text-gray-500 -mt-2 mb-4">Enable or disable reports for each role</p>
+        {!perms ? (
+          <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-[#518dca]" /></div>
+        ) : (
+          <div className="space-y-0">
+            {/* Header */}
+            <div className="grid grid-cols-[1fr_60px_60px_60px] gap-2 pb-2 border-b border-gray-200 mb-2">
+              <span className="text-[10px] font-medium text-gray-500 uppercase">Report</span>
+              <span className="text-[10px] font-medium text-gray-500 uppercase text-center">Trader</span>
+              <span className="text-[10px] font-medium text-gray-500 uppercase text-center">Treasury</span>
+              <span className="text-[10px] font-medium text-gray-500 uppercase text-center">Admin</span>
+            </div>
+            {Object.entries(perms).map(([rid, roles]) => (
+              <div key={rid} className="grid grid-cols-[1fr_60px_60px_60px] gap-2 items-center py-2 border-b border-gray-50">
+                <span className="text-xs font-medium text-[#08263e]">{REPORT_LABELS[rid] || rid}</span>
+                {['trader', 'treasury', 'admin'].map(role => (
+                  <div key={role} className="flex justify-center">
+                    <Switch
+                      checked={roles[role] ?? false}
+                      onCheckedChange={(v) => handleToggle(rid, role, v)}
+                      data-testid={`perm-${rid}-${role}`}
+                      disabled={rid === 'audit-trail' && role === 'admin'}
+                    />
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+        )}
+        <div className="flex justify-end gap-2 mt-4">
+          <Button variant="outline" size="sm" onClick={onClose}>Cancel</Button>
+          <Button size="sm" onClick={handleSave} disabled={saving || !perms}
+            className="bg-[#08263e] text-white" data-testid="perm-save-btn">
+            {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
+            Save Permissions
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ── Main Page ───────────────────────────────────────────────────────────────
 
 export default function ReportsPage() {
   const { user } = useAuth();
   const role = user?.role || '';
   const [activeReport, setActiveReport] = useState(null);
+  const [permissions, setPermissions] = useState(null);
+  const [showSettings, setShowSettings] = useState(false);
 
-  const visibleReports = Object.entries(REPORTS).filter(([, r]) => r.roles.includes(role));
+  // Fetch permissions on mount
+  useEffect(() => {
+    let cancelled = false;
+    api.get('/reports/permissions').then(res => {
+      if (!cancelled) setPermissions(res.data.permissions);
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [showSettings]); // refetch after settings dialog closes
+
+  // Filter reports based on permissions
+  const visibleReports = Object.entries(REPORTS).filter(([id]) => {
+    if (!permissions) return false;
+    const rp = permissions[id];
+    if (!rp) return false;
+    // For admin, the full permissions object is returned
+    if (role === 'admin') return rp.admin !== false;
+    // For other roles, check their specific role
+    return rp[role] === true;
+  });
 
   if (activeReport && REPORTS[activeReport]) {
     return (
@@ -482,5 +616,17 @@ export default function ReportsPage() {
     );
   }
 
-  return <ReportSelector reports={visibleReports} onSelect={setActiveReport} />;
+  return (
+    <>
+      <ReportSelector
+        reports={visibleReports}
+        onSelect={setActiveReport}
+        isAdmin={role === 'admin'}
+        onOpenSettings={() => setShowSettings(true)}
+      />
+      {role === 'admin' && (
+        <PermissionsDialog open={showSettings} onClose={() => setShowSettings(false)} />
+      )}
+    </>
+  );
 }
