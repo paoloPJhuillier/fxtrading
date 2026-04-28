@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { useAuth } from '@/lib/auth';
 import api from '@/lib/api';
 import { Button } from '@/components/ui/button';
@@ -7,10 +7,13 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import {
   FileText, Download, FileSpreadsheet, Loader2, Shield, BarChart3,
-  Users, Clock, TrendingUp, Briefcase, ChevronLeft, Search, ArrowUpDown, Settings
+  Users, Clock, TrendingUp, Briefcase, ChevronLeft, Search, ArrowUpDown, Settings, Check, ChevronsUpDown
 } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
 // ── Report definitions ──────────────────────────────────────────────────────
@@ -233,6 +236,59 @@ function useDebounce(value, delay = 400) {
   return debounced;
 }
 
+// ── Filter Combobox (autocomplete dropdown) ─────────────────────────────────
+
+function FilterCombobox({ label, value, onValueChange, options, placeholder, testId }) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState('');
+
+  const filtered = useMemo(() => {
+    if (!search) return options;
+    const q = search.toLowerCase();
+    return options.filter(o => o.toLowerCase().includes(q));
+  }, [options, search]);
+
+  return (
+    <div className="w-[160px]">
+      <Label className="text-[10px] text-gray-500 uppercase mb-1 block">{label}</Label>
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <Button variant="outline" role="combobox" aria-expanded={open}
+            className="w-full h-8 justify-between text-xs font-normal bg-white px-2"
+            data-testid={testId}>
+            <span className="truncate">{value || placeholder || 'All'}</span>
+            <ChevronsUpDown className="ml-1 h-3 w-3 shrink-0 opacity-50" />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-[200px] p-0" align="start">
+          <Command shouldFilter={false}>
+            <CommandInput placeholder={`Search ${label.toLowerCase()}...`} value={search}
+              onValueChange={setSearch} className="h-8 text-xs" />
+            <CommandList>
+              <CommandEmpty className="py-3 text-center text-xs text-gray-400">No results</CommandEmpty>
+              <CommandGroup>
+                <CommandItem value="__clear__" onSelect={() => { onValueChange(''); setOpen(false); setSearch(''); }}
+                  className="text-xs text-gray-400">
+                  <Check className={cn("mr-2 h-3 w-3", !value ? "opacity-100" : "opacity-0")} />
+                  All
+                </CommandItem>
+                {filtered.map(opt => (
+                  <CommandItem key={opt} value={opt}
+                    onSelect={() => { onValueChange(opt); setOpen(false); setSearch(''); }}
+                    className="text-xs">
+                    <Check className={cn("mr-2 h-3 w-3", value === opt ? "opacity-100" : "opacity-0")} />
+                    {opt}
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            </CommandList>
+          </Command>
+        </PopoverContent>
+      </Popover>
+    </div>
+  );
+}
+
 // ── Paginated reports (row-level data that grows with transactions) ─────────
 const PAGINATED_REPORTS = new Set(['deal-blotter', 'settlement', 'audit-trail']);
 
@@ -250,22 +306,21 @@ function ReportViewer({ reportId, report, onBack }) {
   const [dateFrom, setDateFrom] = useState(report.filters.includes('dateRange') ? ytd.from : '');
   const [dateTo, setDateTo] = useState(report.filters.includes('dateRange') ? ytd.to : '');
   const [status, setStatus] = useState('');
-  const [clientRaw, setClientRaw] = useState('');
-  const [currencyRaw, setCurrencyRaw] = useState('');
-  const [fromBankRaw, setFromBankRaw] = useState('');
-  const [toBankRaw, setToBankRaw] = useState('');
-  const [auditUserRaw, setAuditUserRaw] = useState('');
+  const [client, setClient] = useState('');
+  const [currency, setCurrency] = useState('');
+  const [fromBank, setFromBank] = useState('');
+  const [toBank, setToBank] = useState('');
+  const [auditUser, setAuditUser] = useState('');
   const [groupBy, setGroupBy] = useState('daily');
   const [sortKey, setSortKey] = useState(null);
   const [sortDir, setSortDir] = useState('desc');
+  const [filterOptions, setFilterOptions] = useState(null);
   const abortRef = useRef(null);
 
-  // Debounce text search inputs (400ms)
-  const client = useDebounce(clientRaw);
-  const currency = useDebounce(currencyRaw);
-  const fromBank = useDebounce(fromBankRaw);
-  const toBank = useDebounce(toBankRaw);
-  const auditUser = useDebounce(auditUserRaw);
+  // Fetch filter options once
+  useEffect(() => {
+    api.get('/reports/filter-options').then(r => setFilterOptions(r.data)).catch(() => {});
+  }, []);
 
   const isPaginated = PAGINATED_REPORTS.has(reportId);
   const hasFilters = report.filters.length > 0;
@@ -421,68 +476,29 @@ function ReportViewer({ reportId, report, onBack }) {
             </>
           )}
           {report.filters.includes('status') && (
-            <div className="w-[120px]">
-              <Label className="text-[10px] text-gray-500 uppercase mb-1 block">Status</Label>
-              <Select value={status} onValueChange={setStatus}>
-                <SelectTrigger className="h-8 text-xs bg-white" data-testid="filter-status">
-                  <SelectValue placeholder="All" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all_statuses">All</SelectItem>
-                  <SelectItem value="pending">Pending</SelectItem>
-                  <SelectItem value="confirmed">Confirmed</SelectItem>
-                  <SelectItem value="returned">Returned</SelectItem>
-                  <SelectItem value="cancelled">Cancelled</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+            <FilterCombobox label="Status" value={status} onValueChange={setStatus}
+              options={filterOptions?.statuses || ['pending', 'confirmed', 'returned', 'cancelled']}
+              placeholder="All" testId="filter-status" />
           )}
           {report.filters.includes('client') && (
-            <div className="w-[150px]">
-              <Label className="text-[10px] text-gray-500 uppercase mb-1 block">Client</Label>
-              <div className="relative">
-                <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-400" />
-                <Input placeholder="Search..." value={clientRaw} onChange={e => setClientRaw(e.target.value)}
-                  className="h-8 text-xs pl-7 bg-white" data-testid="filter-client" />
-              </div>
-            </div>
+            <FilterCombobox label="Client" value={client} onValueChange={setClient}
+              options={filterOptions?.clients || []} placeholder="All" testId="filter-client" />
           )}
           {report.filters.includes('currency') && (
-            <div className="w-[100px]">
-              <Label className="text-[10px] text-gray-500 uppercase mb-1 block">Currency</Label>
-              <Input placeholder="e.g. USD" value={currencyRaw} onChange={e => setCurrencyRaw(e.target.value)}
-                className="h-8 text-xs bg-white" data-testid="filter-currency" />
-            </div>
+            <FilterCombobox label="Currency" value={currency} onValueChange={setCurrency}
+              options={filterOptions?.currencies || []} placeholder="All" testId="filter-currency" />
           )}
           {report.filters.includes('fromBank') && (
-            <div className="w-[130px]">
-              <Label className="text-[10px] text-gray-500 uppercase mb-1 block">From Bank</Label>
-              <div className="relative">
-                <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-400" />
-                <Input placeholder="Search..." value={fromBankRaw} onChange={e => setFromBankRaw(e.target.value)}
-                  className="h-8 text-xs pl-7 bg-white" data-testid="filter-from-bank" />
-              </div>
-            </div>
+            <FilterCombobox label="From Bank" value={fromBank} onValueChange={setFromBank}
+              options={filterOptions?.from_banks || []} placeholder="All" testId="filter-from-bank" />
           )}
           {report.filters.includes('toBank') && (
-            <div className="w-[130px]">
-              <Label className="text-[10px] text-gray-500 uppercase mb-1 block">To Bank</Label>
-              <div className="relative">
-                <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-400" />
-                <Input placeholder="Search..." value={toBankRaw} onChange={e => setToBankRaw(e.target.value)}
-                  className="h-8 text-xs pl-7 bg-white" data-testid="filter-to-bank" />
-              </div>
-            </div>
+            <FilterCombobox label="To Bank" value={toBank} onValueChange={setToBank}
+              options={filterOptions?.to_banks || []} placeholder="All" testId="filter-to-bank" />
           )}
           {report.filters.includes('auditUser') && (
-            <div className="w-[150px]">
-              <Label className="text-[10px] text-gray-500 uppercase mb-1 block">User</Label>
-              <div className="relative">
-                <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-400" />
-                <Input placeholder="Search user..." value={auditUserRaw} onChange={e => setAuditUserRaw(e.target.value)}
-                  className="h-8 text-xs pl-7 bg-white" data-testid="filter-audit-user" />
-              </div>
-            </div>
+            <FilterCombobox label="User" value={auditUser} onValueChange={setAuditUser}
+              options={filterOptions?.users || []} placeholder="All" testId="filter-audit-user" />
           )}
           {report.filters.includes('groupBy') && (
             <div className="w-[110px]">

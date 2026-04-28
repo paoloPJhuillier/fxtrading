@@ -1004,6 +1004,40 @@ async def update_report_permissions(req: dict, user=Depends(get_current_user)):
 # --- Reports ---
 from services import reports as rpt
 
+@api_router.get("/reports/filter-options")
+async def report_filter_options(user=Depends(get_current_user)):
+    """Return distinct values for all report filter fields. Cached per request."""
+    deal_query = {}
+    if user["role"] == "trader":
+        deal_query["created_by"] = user["id"]
+
+    # Fetch minimal projections for distinct values
+    deals = await db.deals.find(deal_query, {
+        "_id": 0, "client_name": 1, "buy_currency": 1, "sell_currency": 1,
+        "from_bank": 1, "to_bank": 1, "status": 1
+    }).to_list(100000)
+
+    clients = sorted({d.get("client_name", "") for d in deals if d.get("client_name")})
+    currencies = sorted({c for d in deals for c in [d.get("buy_currency", ""), d.get("sell_currency", "")] if c})
+    from_banks = sorted({d.get("from_bank", "") for d in deals if d.get("from_bank")})
+    to_banks = sorted({d.get("to_bank", "") for d in deals if d.get("to_bank")})
+    statuses = sorted({d.get("status", "") for d in deals if d.get("status")})
+
+    # Users from audit logs (for audit-trail filter)
+    users = []
+    if user["role"] == "admin":
+        logs = await db.audit_logs.find({}, {"_id": 0, "user_name": 1}).to_list(100000)
+        users = sorted({l.get("user_name", "") for l in logs if l.get("user_name")})
+
+    return {
+        "clients": clients,
+        "currencies": currencies,
+        "from_banks": from_banks,
+        "to_banks": to_banks,
+        "statuses": statuses,
+        "users": users,
+    }
+
 async def _get_deals_for_report(query, user, sort_field="created_at", sort_dir=-1, page=None, limit=None):
     """Shared query builder for report endpoints. Supports pagination."""
     if user["role"] == "trader":
