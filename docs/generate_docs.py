@@ -144,7 +144,8 @@ SCOPE_MAP = [
     ("reference", "bank_accounts", "bank_accounts", "Bank account numbers per bank"),
     ("reference", "currencies", "currencies", "Fiat, crypto, and stablecoin currencies"),
     ("reference", "transaction_types", "transaction_types", "Today, Tomorrow, Spot"),
-    ("reference", "transfer_types", "transfer_types", "FX Crypto, FX Local, PDAX WD"),
+    ("reference", "transfer_types", "transfer_types", "FX Crypto, FX Local, PDAX WD, FX Bank Deal"),
+    ("reference", "report_permissions", "report_permissions", "Per-role report access toggles"),
     ("audit", "audit_logs", "audit_logs", "Full audit trail of all actions"),
 ]
 
@@ -255,6 +256,38 @@ REPORTS = [
     ("User Activity", "Per-user breakdown of deals created, processed, returned, proofs uploaded", "Date range", "Admin only"),
     ("Volume Summary", "Deal counts and volumes grouped by day, week, or month", "Date range, group by", "All roles"),
     ("Client Activity", "Per-client deal volume, frequency, average deal size, currency pairs", "Date range", "All roles"),
+]
+
+BUSINESS_RULES = [
+    ("FX Bank Deal Transfer Type", [
+        "When transfer_type = 'FX Bank Deal', the Destination (To) section is hidden in the UI",
+        "Server coerces to_type/to_company/to_bank/to_account_num to empty on deal creation",
+        "Client Settlement Proof upload is blocked (UI hidden + server returns 400)",
+        "Only Processor Settlement Proofs are applicable for FX Bank Deal",
+    ]),
+    ("Currency Conversion — SALE Perspective", [
+        "When Buy Currency = PHP and Sell Currency is any non-PHP currency, auto-divide mode activates",
+        "Formula: Converted Amount = Currency Amount / Exchange Rate (instead of multiplication)",
+        "Blue info box displayed: 'Auto-divide mode: Buy PHP / Rate = Converted Amount (SALE perspective)'",
+        "Rate summary shows division symbol (÷) instead of multiplication (×)",
+        "All other currency combinations use standard multiplication",
+    ]),
+    ("Settlement Proof Access Control", [
+        "Client Settlement Proofs: only Traders can upload (Treasury can view only)",
+        "Processor Settlement Proofs: Treasury can upload",
+        "Both proof types: all roles can view and download",
+        "Treasury cannot confirm a deal if zero settlement proofs are attached (UI + server enforced)",
+    ]),
+    ("Number Formatting", [
+        "Currency Amount input shows comma-formatted helper text below the field",
+        "Converted Amount field displays with locale-aware comma formatting",
+        "Amount fields accept decimal input (stripped of non-numeric characters except '.')",
+    ]),
+    ("Deal History", [
+        "All deal mutations are recorded in the history array (created, confirmed, returned, cancelled, edited, resubmitted, proof uploaded/deleted)",
+        "My Deals table shows 'Last Action' column with colored badges",
+        "List API truncates history to last 3 entries for performance; detail API returns full history",
+    ]),
 ]
 
 
@@ -559,6 +592,15 @@ def tdd_pdf_sections(elems, ss):
          ["Token Injection", "Axios interceptor auto-attaches Bearer token to all requests"]],
         widths=[100, 365])
 
+    # 11. Business Rules
+    elems.append(PageBreak())
+    h1("11. Business Rules & Logic")
+    for rule_name, rules in BUSINESS_RULES:
+        h2(rule_name)
+        for rule in rules:
+            body(f"  {rule}")
+        sp()
+
 
 def tdd_docx_sections(doc):
     def h1(t): _docx_heading(doc, t, 1)
@@ -646,6 +688,13 @@ def tdd_docx_sections(doc):
          ["File Upload", "Content-type whitelist, 10MB max, UUID paths"],
          ["Transport", "HTTPS via K8s Ingress TLS"],
          ["Token Injection", "Axios interceptor auto-attaches Bearer"]])
+
+    doc.add_page_break()
+    h1("11. Business Rules & Logic")
+    for rule_name, rules in BUSINESS_RULES:
+        h2(rule_name)
+        for rule in rules:
+            doc.add_paragraph(f"  {rule}")
 
 
 # ╔══════════════════════════════════════════════════════════════════════════════╗

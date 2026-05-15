@@ -416,6 +416,11 @@ async def list_deals(
     skip = (page - 1) * limit
     list_projection = {"_id": 0, "id": 1, "reference_number": 1, "client_name": 1, "transaction_type": 1, "transfer_type": 1, "buy_currency": 1, "sell_currency": 1, "currency_amount": 1, "amount": 1, "rate": 1, "deal_date": 1, "value_date": 1, "status": 1, "created_at": 1, "created_by_name": 1, "from_type": 1, "from_company": 1, "from_bank": 1, "from_account_num": 1, "from_wallet_address": 1, "to_type": 1, "to_company": 1, "to_bank": 1, "to_account_num": 1, "to_wallet_address": 1, "ours_type": 1, "ours_bank": 1, "ours_account_num": 1, "ours_wallet_address": 1, "remarks": 1, "treasury_remarks": 1, "cancellation_reason": 1, "processed_by_name": 1, "processed_at": 1, "settlement_proofs": 1, "history": 1}
     deals = await db.deals.find(query, list_projection).sort("created_at", -1).skip(skip).limit(limit).to_list(limit)
+    # Truncate history to last 3 entries for list performance
+    for d in deals:
+        h = d.get("history", [])
+        if len(h) > 3:
+            d["history"] = h[-3:]
     return {"deals": deals, "total": total, "page": page, "pages": (total + limit - 1) // limit if total > 0 else 1}
 
 @api_router.post("/deals")
@@ -438,6 +443,9 @@ async def create_deal(req: DealCreate, user=Depends(get_current_user)):
         "created_at": datetime.now(timezone.utc).isoformat(),
         "updated_at": datetime.now(timezone.utc).isoformat()
     }
+    # FX Bank Deal: coerce destination fields to empty (no counterparty)
+    if deal.get("transfer_type") == "FX Bank Deal":
+        deal.update({"to_type": "bank", "to_company": "", "to_bank": "", "to_account_num": "", "to_wallet_address": ""})
     await db.deals.insert_one(deal)
     deal.pop("_id", None)
     await record_deal_history(deal["id"], "created", user, remarks=f"Deal ticket created — {req.buy_currency}/{req.sell_currency} {req.currency_amount}")
@@ -458,6 +466,9 @@ async def upload_settlement_proof(deal_id: str, file: UploadFile = File(...), pr
     deal = await db.deals.find_one({"id": deal_id}, {"_id": 0})
     if not deal:
         raise HTTPException(status_code=404, detail="Deal not found")
+    # Block client proof uploads for FX Bank Deal
+    if proof_type == "client" and deal.get("transfer_type") == "FX Bank Deal":
+        raise HTTPException(status_code=400, detail="Client settlement proofs not applicable for FX Bank Deal")
     allowed = ["image/jpeg", "image/png", "image/webp", "image/gif", "application/pdf"]
     if file.content_type not in allowed:
         raise HTTPException(status_code=400, detail="Only image files (JPEG, PNG, WebP, GIF) and PDF are allowed")
@@ -511,6 +522,9 @@ async def process_deal(deal_id: str, req: DealProcess, user=Depends(get_current_
         raise HTTPException(status_code=404, detail="Deal not found")
     if deal["status"] != "pending":
         raise HTTPException(status_code=400, detail="Deal already processed")
+    # Item 9: Cannot confirm without settlement proofs
+    if req.status == "confirmed" and len(deal.get("settlement_proofs", [])) == 0:
+        raise HTTPException(status_code=400, detail="Cannot confirm deal without settlement proofs")
     update = {
         "status": req.status,
         "treasury_remarks": req.treasury_remarks,

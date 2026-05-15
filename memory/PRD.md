@@ -1,7 +1,7 @@
 # FX Trading Tracker — PRD
 
 ## Original Problem Statement
-Build an FX Trading Tracker platform with secure role-based login, deal ticket management for traders, processing capabilities for treasury operations, and admin features for user management and audit trails. Prepare for on-premise deployment with switchable storage and database backends.
+Build an FX Trading Tracker platform with secure role-based login, deal ticket management, treasury operations, admin features, and on-premise deployment support.
 
 ## Credentials
 - Trader: trader@fxtracker.com / Trader@123
@@ -9,10 +9,10 @@ Build an FX Trading Tracker platform with secure role-based login, deal ticket m
 - Admin: admin@fxtracker.com / Admin@123
 
 ## Architecture
-- **Frontend**: React 19.0.0, React Router 7.5.1, TailwindCSS 3.4.17, Shadcn/UI (Radix)
+- **Frontend**: React 19.0.0, React Router 7.5.1, TailwindCSS 3.4.17, Shadcn/UI
 - **Backend**: FastAPI 0.110.1, Pydantic 2.12.5, reportlab 4.4.10
-- **Database**: Switchable via DB_TYPE: MongoDB 7.0.31 (motor 3.3.1) | Couchbase Enterprise (SDK 4.6.0)
-- **Storage**: Switchable via STORAGE_TYPE: Emergent Object Storage | S3-compatible (boto3 1.42.58)
+- **Database**: Switchable (DB_TYPE): MongoDB 7.0.31 | Couchbase Enterprise SDK 4.6.0
+- **Storage**: Switchable (STORAGE_TYPE): Emergent Object Storage | S3-compatible (boto3 1.42.58)
 
 ## What's Been Implemented
 
@@ -24,28 +24,34 @@ Build an FX Trading Tracker platform with secure role-based login, deal ticket m
 ### Returned Deal Edit Page (Complete - Mar 17, 2026)
 ### Switchable Storage Abstraction (Complete - Apr 24, 2026)
 ### Switchable Database Abstraction (Complete - Apr 24, 2026)
-
 ### Reports Feature (Complete - Apr 28, 2026)
-- 7 industry-standard reports with tabular view + CSV/PDF export
-- **Admin-configurable permissions**: Per-role enable/disable via Permissions dialog
-- **YTD default date range**: Jan 1 → today
-- **Additional filters**: Client Activity (client), Settlement (from/to bank), Audit Trail (user)
-- **Server-side pagination**: Deal Blotter, Settlement, Audit Trail use `page`/`limit` params with `count_documents()` for total
-- **Server-side sorting**: `sort_by`/`sort_dir` params on paginated reports
-- **Debounced search**: 400ms debounce on all text filter inputs (client, currency, bank, user)
-- **Aggregation reports** (Volume Summary, Client Activity, User Activity, Open Positions) return bounded summary rows — no pagination needed
-- **CSV/PDF exports** always fetch full dataset regardless of current page
-- Tested: 16/16 pagination + 8/8 frontend (100%)
-
 ### Documentation (Complete - Apr 28, 2026)
-- Technical Design Document + Deployment Guide (PDF + DOCX) in /app/docs/
+
+### FX Assessment Revisions (Complete - May 15, 2026)
+9 items from assessment implemented and tested:
+
+1. **Client Settlement — Trader Only**: Treasury can only view client proofs, not upload. Upload button removed from Treasury review. Server blocks client proof upload for non-traders.
+2. **Deal History Column**: "Last Action" column in My Deals table showing colored badges (created, confirmed, returned, proof uploaded). History truncated to last 3 entries in list API.
+3. **Currency Conversion — SALE Perspective (÷)**: When Buy Currency = PHP and Sell Currency is any other currency, formula auto-switches to division.
+4. **Auto-Detect Divide Formula**: Blue info box appears when auto-divide mode is active. Rate summary shows ÷ instead of ×.
+5. **Auto-Format Numbers with Commas**: Currency Amount shows comma-formatted helper text. Converted Amount field displays with Intl.NumberFormat.
+6. **New Transfer Type: FX Bank Deal**: Seeded in DB. Available in Transfer Type dropdown.
+7. **Deactivate Destination (To) for FX Bank Deal**: When FX Bank Deal selected, Destination section hidden and replaced with "not applicable" notice. Server coerces destination fields to empty.
+8. **Deactivate Client Settlement Proofs for FX Bank Deal**: Client's Settlement upload hidden for FX Bank Deal. Server blocks client proof uploads for FX Bank Deal deals.
+9. **Disable Confirm Without Proofs**: Treasury Confirm button disabled when zero settlement proofs. Amber message "Settlement proofs required to confirm" shown. Server enforces: 400 error if confirming with 0 proofs.
+
+Server-side enforcement added for items 6-9 (not just UI):
+- FX Bank Deal → destination fields coerced to empty on create
+- FX Bank Deal → client proof upload blocked (400)
+- Confirm → blocked without proofs (400)
+
+Tested: 7/7 backend + 9/9 frontend items (100%)
 
 ---
 
 ## Backlog / Future Tasks
 - **P1**: Backend refactoring — split server.py into /routes, /models, /services
-- **P1**: Move aggregation reports to MongoDB $group pipelines for large volumes
-- **P2**: Rows-per-page dropdown for paginated reports
-- **P2**: Server-side sortable column allowlist per report
+- **P1**: Extract shared deal formula logic into useDealFormulas hook (DRY)
+- **P2**: Move aggregation reports to MongoDB $group pipelines
 - **P2**: Email notifications for deal status changes
-- **P2**: Scheduled report delivery (auto-email daily/weekly)
+- **P2**: Scheduled report delivery
