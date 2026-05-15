@@ -79,10 +79,23 @@ export default function EditDealPage() {
   const up = useCallback((k, v) => {
     setF(p => {
       const next = { ...p, [k]: v };
-      if (k === 'currency_amount' || k === 'rate') {
+      // When transfer type changes to FX Bank Deal, clear destination fields
+      if (k === 'transfer_type' && v === 'FX Bank Deal') {
+        next.to_type = 'bank'; next.to_company = ''; next.to_bank = '';
+        next.to_account_num = ''; next.to_wallet_address = '';
+      }
+      // Auto-compute amount: use ÷ when Buy=PHP, × otherwise
+      if (k === 'currency_amount' || k === 'rate' || k === 'buy_currency' || k === 'sell_currency') {
         const ca = parseFloat(k === 'currency_amount' ? v : next.currency_amount) || 0;
         const r = parseFloat(k === 'rate' ? v : next.rate) || 0;
-        next.amount = (ca > 0 && r > 0) ? (ca * r).toFixed(2) : '';
+        const buyPHP = (k === 'buy_currency' ? v : next.buy_currency) === 'PHP';
+        const sellOther = (k === 'sell_currency' ? v : next.sell_currency) && (k === 'sell_currency' ? v : next.sell_currency) !== 'PHP';
+        const divide = buyPHP && sellOther;
+        if (ca > 0 && r > 0) {
+          next.amount = divide ? (ca / r).toFixed(2) : (ca * r).toFixed(2);
+        } else {
+          next.amount = '';
+        }
       }
       if (k === 'from_type') { next.from_bank = ''; next.from_account_num = ''; next.from_wallet_address = ''; }
       if (k === 'to_type') { next.to_bank = ''; next.to_account_num = ''; next.to_wallet_address = ''; }

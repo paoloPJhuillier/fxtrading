@@ -307,16 +307,10 @@ export default function TreasuryPage() {
               {sel.treasury_remarks && (<div className="bg-blue-50 p-3 rounded-md"><p className="text-[10px] text-blue-400 uppercase tracking-wider mb-1">Treasury Remarks</p><p className="text-sm">{sel.treasury_remarks}</p></div>)}
 
               <Separator />
-              {/* Client's Settlement Proofs */}
+              {/* Client's Settlement Proofs - View only for Treasury (Item 1: Trader-only upload) */}
               <div>
                 <div className="flex items-center justify-between mb-3">
                   <p className="text-xs font-medium text-slate-600 uppercase tracking-wider">Client's Settlement</p>
-                  <div>
-                    <input type="file" ref={clientFileRef} className="hidden" accept="image/*,.pdf" multiple onChange={e => uploadProof(e, 'client')} />
-                    <Button size="sm" variant="outline" onClick={() => clientFileRef.current?.click()} disabled={uploading} data-testid="upload-client-proof-btn">
-                      <Upload className="h-3 w-3 mr-1.5" /> {uploading ? 'Uploading...' : 'Upload'}
-                    </Button>
-                  </div>
                 </div>
                 {clientProofs.length > 0 ? (
                   <ProofGrid proofs={clientProofs} onDelete={deleteProof} />
@@ -370,9 +364,12 @@ export default function TreasuryPage() {
           )}
           {sel?.status === 'pending' && (
             <DialogFooter className="gap-2">
+              {(clientProofs.length + processorProofs.length) === 0 && (
+                <p className="text-[10px] text-amber-600 mr-auto self-center">Settlement proofs required to confirm</p>
+              )}
               <Button variant="outline" onClick={() => _setSel(null)} data-testid="cancel-review-btn">Cancel</Button>
               <Button className="bg-[#ec474e] hover:bg-[#ec474e]/90 text-white" onClick={() => tryProcess('returned')} disabled={processing} data-testid="return-deal-btn"><XCircle className="h-4 w-4 mr-2" /> Return</Button>
-              <Button className="bg-[#10b981] hover:bg-[#10b981]/90 text-white" onClick={() => tryProcess('confirmed')} disabled={processing} data-testid="confirm-deal-btn"><CheckCircle className="h-4 w-4 mr-2" /> Confirm</Button>
+              <Button className="bg-[#10b981] hover:bg-[#10b981]/90 text-white" onClick={() => tryProcess('confirmed')} disabled={processing || (clientProofs.length + processorProofs.length) === 0} data-testid="confirm-deal-btn"><CheckCircle className="h-4 w-4 mr-2" /> Confirm</Button>
             </DialogFooter>
           )}
           {sel?.status !== 'pending' && (

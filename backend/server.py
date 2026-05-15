@@ -77,8 +77,8 @@ class DealCreate(BaseModel):
     from_bank: Optional[str] = ""
     from_account_num: Optional[str] = ""
     from_wallet_address: Optional[str] = ""
-    to_type: str  # "bank" or "crypto"
-    to_company: str
+    to_type: Optional[str] = "bank"  # "bank" or "crypto"
+    to_company: Optional[str] = ""
     to_bank: Optional[str] = ""
     to_account_num: Optional[str] = ""
     to_wallet_address: Optional[str] = ""
@@ -414,7 +414,7 @@ async def list_deals(
         query.setdefault("deal_date", {})["$lte"] = date_to
     total = await db.deals.count_documents(query)
     skip = (page - 1) * limit
-    list_projection = {"_id": 0, "id": 1, "reference_number": 1, "client_name": 1, "transaction_type": 1, "transfer_type": 1, "buy_currency": 1, "sell_currency": 1, "currency_amount": 1, "amount": 1, "rate": 1, "deal_date": 1, "value_date": 1, "status": 1, "created_at": 1, "created_by_name": 1, "from_type": 1, "from_company": 1, "from_bank": 1, "from_account_num": 1, "from_wallet_address": 1, "to_type": 1, "to_company": 1, "to_bank": 1, "to_account_num": 1, "to_wallet_address": 1, "ours_type": 1, "ours_bank": 1, "ours_account_num": 1, "ours_wallet_address": 1, "remarks": 1, "treasury_remarks": 1, "cancellation_reason": 1, "processed_by_name": 1, "processed_at": 1, "settlement_proofs": 1}
+    list_projection = {"_id": 0, "id": 1, "reference_number": 1, "client_name": 1, "transaction_type": 1, "transfer_type": 1, "buy_currency": 1, "sell_currency": 1, "currency_amount": 1, "amount": 1, "rate": 1, "deal_date": 1, "value_date": 1, "status": 1, "created_at": 1, "created_by_name": 1, "from_type": 1, "from_company": 1, "from_bank": 1, "from_account_num": 1, "from_wallet_address": 1, "to_type": 1, "to_company": 1, "to_bank": 1, "to_account_num": 1, "to_wallet_address": 1, "ours_type": 1, "ours_bank": 1, "ours_account_num": 1, "ours_wallet_address": 1, "remarks": 1, "treasury_remarks": 1, "cancellation_reason": 1, "processed_by_name": 1, "processed_at": 1, "settlement_proofs": 1, "history": 1}
     deals = await db.deals.find(query, list_projection).sort("created_at", -1).skip(skip).limit(limit).to_list(limit)
     return {"deals": deals, "total": total, "page": page, "pages": (total + limit - 1) // limit if total > 0 else 1}
 
@@ -900,12 +900,13 @@ async def seed_data():
 
     # Transfer types - always reseed with correct values
     existing_tf = await db.transfer_types.find_one({"name": "FX Crypto Conversion"})
-    if not existing_tf:
+    existing_fxbd = await db.transfer_types.find_one({"name": "FX Bank Deal"})
+    if not existing_tf or not existing_fxbd:
         await db.transfer_types.delete_many({})
-        types = [("FX Crypto Conversion", "FX_CRYPTO"), ("FX Local", "FX_LOCAL"), ("PDAX Withdrawal", "PDAX_WD")]
+        types = [("FX Crypto Conversion", "FX_CRYPTO"), ("FX Local", "FX_LOCAL"), ("PDAX Withdrawal", "PDAX_WD"), ("FX Bank Deal", "FX_BANK")]
         docs = [{"id": str(uuid.uuid4()), "name": n, "code": c, "is_active": True, "created_at": datetime.now(timezone.utc).isoformat()} for n, c in types]
         await db.transfer_types.insert_many(docs)
-        logger.info("Reseeded transfer types")
+        logger.info("Reseeded transfer types (with FX Bank Deal)")
 
     # Companies
     if await db.companies.count_documents({}) == 0:

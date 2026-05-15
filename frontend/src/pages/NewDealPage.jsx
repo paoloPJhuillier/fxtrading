@@ -42,13 +42,29 @@ export default function NewDealPage() {
     currency_amount: '', amount: '', rate: '', remarks: ''
   });
 
+  const isFxBankDeal = f.transfer_type === 'FX Bank Deal';
+  const isDivideMode = f.buy_currency === 'PHP' && f.sell_currency && f.sell_currency !== 'PHP';
+
   const up = useCallback((k, v) => {
     setF(p => {
       const next = { ...p, [k]: v };
-      if (k === 'currency_amount' || k === 'rate') {
+      // When transfer type changes to FX Bank Deal, clear destination fields
+      if (k === 'transfer_type' && v === 'FX Bank Deal') {
+        next.to_type = 'bank'; next.to_company = ''; next.to_bank = '';
+        next.to_account_num = ''; next.to_wallet_address = '';
+      }
+      // Auto-compute amount: use ÷ when Buy=PHP, × otherwise
+      if (k === 'currency_amount' || k === 'rate' || k === 'buy_currency' || k === 'sell_currency') {
         const ca = parseFloat(k === 'currency_amount' ? v : next.currency_amount) || 0;
         const r = parseFloat(k === 'rate' ? v : next.rate) || 0;
-        next.amount = (ca > 0 && r > 0) ? (ca * r).toFixed(2) : '';
+        const buyPHP = (k === 'buy_currency' ? v : next.buy_currency) === 'PHP';
+        const sellOther = (k === 'sell_currency' ? v : next.sell_currency) && (k === 'sell_currency' ? v : next.sell_currency) !== 'PHP';
+        const divide = buyPHP && sellOther;
+        if (ca > 0 && r > 0) {
+          next.amount = divide ? (ca / r).toFixed(2) : (ca * r).toFixed(2);
+        } else {
+          next.amount = '';
+        }
       }
       if (k === 'from_type') { next.from_bank = ''; next.from_account_num = ''; next.from_wallet_address = ''; }
       if (k === 'to_type') { next.to_bank = ''; next.to_account_num = ''; next.to_wallet_address = ''; }
@@ -69,7 +85,10 @@ export default function NewDealPage() {
 
   const validate = () => {
     const errs = {};
-    const base = ['transaction_type', 'transfer_type', 'client_name', 'from_company', 'to_company', 'buy_currency', 'sell_currency', 'currency_amount', 'rate'];
+    const base = ['transaction_type', 'transfer_type', 'client_name', 'from_company', 'buy_currency', 'sell_currency', 'currency_amount', 'rate'];
+    if (f.transfer_type !== 'FX Bank Deal') {
+      base.push('to_company');
+    }
     base.forEach(k => { if (!f[k]) errs[k] = 'Required'; });
     if (!f.deal_date) errs.deal_date = 'Required';
     if (!f.value_date) errs.value_date = 'Required';
@@ -77,10 +96,13 @@ export default function NewDealPage() {
       if (!f.from_bank) errs.from_bank = 'Required';
       if (!f.from_account_num) errs.from_account_num = 'Required';
     } else { if (!f.from_wallet_address) errs.from_wallet_address = 'Required'; }
-    if (f.to_type === 'bank') {
-      if (!f.to_bank) errs.to_bank = 'Required';
-      if (!f.to_account_num) errs.to_account_num = 'Required';
-    } else { if (!f.to_wallet_address) errs.to_wallet_address = 'Required'; }
+    // Skip destination validation for FX Bank Deal
+    if (f.transfer_type !== 'FX Bank Deal') {
+      if (f.to_type === 'bank') {
+        if (!f.to_bank) errs.to_bank = 'Required';
+        if (!f.to_account_num) errs.to_account_num = 'Required';
+      } else { if (!f.to_wallet_address) errs.to_wallet_address = 'Required'; }
+    }
     if (f.ours_type === 'bank') {
       if (!f.ours_bank) errs.ours_bank = 'Required';
       if (!f.ours_account_num) errs.ours_account_num = 'Required';
@@ -191,20 +213,26 @@ export default function NewDealPage() {
                 <CurrSel label="Buy Currency" value={f.buy_currency} name="buy_currency" onChange={up} fiat={fiat} stablecoin={stablecoin} crypto={crypto} tid="buy-currency" error={errors.buy_currency} />
                 <CurrSel label="Sell Currency" value={f.sell_currency} name="sell_currency" onChange={up} fiat={fiat} stablecoin={stablecoin} crypto={crypto} tid="sell-currency" error={errors.sell_currency} />
               </div>
+              {isDivideMode && (
+                <div className="bg-blue-50 border border-blue-200 p-2 rounded-md">
+                  <p className="text-[10px] text-blue-600 font-medium">Auto-divide mode: Buy PHP / Rate = Converted Amount (SALE perspective)</p>
+                </div>
+              )}
               <div className="grid grid-cols-3 gap-4">
                 <VField label={`Currency Amount${f.buy_currency ? ` (${f.buy_currency})` : ''}`} error={errors.currency_amount}>
-                  <Input name="currency_amount" type="number" step="0.01" value={f.currency_amount} onChange={onInput} placeholder="0.00" data-testid="currency-amount-input" className={errors.currency_amount ? 'border-red-400' : ''} />
+                  <Input name="currency_amount" type="text" inputMode="decimal" value={f.currency_amount} onChange={e => { const v = e.target.value.replace(/[^0-9.]/g, ''); up('currency_amount', v); }} placeholder="0.00" data-testid="currency-amount-input" className={errors.currency_amount ? 'border-red-400' : ''} />
+                  {f.currency_amount && <p className="text-[10px] text-slate-400 mt-0.5 font-mono">{Number(f.currency_amount).toLocaleString()}</p>}
                 </VField>
                 <VField label="Exchange Rate" error={errors.rate}>
-                  <Input name="rate" type="number" step="0.000001" value={f.rate} onChange={onInput} placeholder="0.000000" data-testid="rate-input" className={errors.rate ? 'border-red-400' : ''} />
+                  <Input name="rate" type="text" inputMode="decimal" value={f.rate} onChange={e => { const v = e.target.value.replace(/[^0-9.]/g, ''); up('rate', v); }} placeholder="0.000000" data-testid="rate-input" className={errors.rate ? 'border-red-400' : ''} />
                 </VField>
                 <VField label={`Converted Amount${f.sell_currency ? ` (${f.sell_currency})` : ''}`}>
-                  <Input type="number" step="0.01" value={f.amount} readOnly className="bg-slate-50 font-medium" placeholder="0.00" data-testid="amount-input" />
+                  <Input type="text" value={f.amount ? Number(f.amount).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}) : ''} readOnly className="bg-slate-50 font-medium" placeholder="0.00" data-testid="amount-input" />
                 </VField>
               </div>
               {f.buy_currency && f.sell_currency && f.currency_amount && f.rate && (
                 <p className="text-xs text-slate-400 font-mono" data-testid="rate-summary">
-                  {Number(f.currency_amount).toLocaleString()} {f.buy_currency} x {f.rate} = {Number(f.amount).toLocaleString()} {f.sell_currency}
+                  {Number(f.currency_amount).toLocaleString()} {f.buy_currency} {isDivideMode ? '÷' : '×'} {f.rate} = {Number(f.amount).toLocaleString()} {f.sell_currency}
                 </p>
               )}
             </CardContent>
@@ -233,6 +261,7 @@ export default function NewDealPage() {
             </CardContent>
           </Card>
 
+          {!isFxBankDeal && (
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
@@ -254,6 +283,15 @@ export default function NewDealPage() {
               )}
             </CardContent>
           </Card>
+          )}
+
+          {isFxBankDeal && (
+            <Card className="border-dashed border-slate-300 bg-slate-50/50">
+              <CardContent className="py-8 text-center">
+                <p className="text-xs text-slate-400">Destination (To) is not applicable for FX Bank Deal</p>
+              </CardContent>
+            </Card>
+          )}
           </>)}
         </div>
 
@@ -298,7 +336,14 @@ export default function NewDealPage() {
             <p className="text-xs text-slate-400 mt-1">Upload separate proofs for client and processor settlements</p>
           </CardHeader>
           <CardContent className="space-y-6">
-            <ProofUploadSection label="Client's Settlement" files={clientProofFiles} fileRef={clientProofRef} onAdd={addClientProofs} onRemove={removeClientProof} testIdPrefix="client-proof" />
+            {!isFxBankDeal && (
+              <ProofUploadSection label="Client's Settlement" files={clientProofFiles} fileRef={clientProofRef} onAdd={addClientProofs} onRemove={removeClientProof} testIdPrefix="client-proof" />
+            )}
+            {isFxBankDeal && (
+              <div className="text-center py-4 border border-dashed rounded-lg bg-slate-50/50">
+                <p className="text-[10px] text-slate-400">Client's Settlement is not applicable for FX Bank Deal</p>
+              </div>
+            )}
             <ProofUploadSection label="Processor's Settlement" files={processorProofFiles} fileRef={processorProofRef} onAdd={addProcessorProofs} onRemove={removeProcessorProof} testIdPrefix="processor-proof" />
           </CardContent>
         </Card>
@@ -340,9 +385,15 @@ export default function NewDealPage() {
             {f.from_type === 'bank' ? (<><CR label="Bank" val={f.from_bank} /><CR label="Account Number" val={f.from_account_num} mono /></>) : (<CR label="Wallet Address" val={f.from_wallet_address} mono />)}
           </div>
           <div className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
-            <div className="col-span-2 text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Destination (To) — {f.to_type === 'bank' ? 'Bank' : 'Crypto'}</div>
-            <CR label="Company" val={f.to_company} />
-            {f.to_type === 'bank' ? (<><CR label="Bank" val={f.to_bank} /><CR label="Account Number" val={f.to_account_num} mono /></>) : (<CR label="Wallet Address" val={f.to_wallet_address} mono />)}
+            {isFxBankDeal ? (
+              <div className="col-span-2 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Destination (To) — N/A (FX Bank Deal)</div>
+            ) : (
+              <>
+                <div className="col-span-2 text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Destination (To) — {f.to_type === 'bank' ? 'Bank' : 'Crypto'}</div>
+                <CR label="Company" val={f.to_company} />
+                {f.to_type === 'bank' ? (<><CR label="Bank" val={f.to_bank} /><CR label="Account Number" val={f.to_account_num} mono /></>) : (<CR label="Wallet Address" val={f.to_wallet_address} mono />)}
+              </>
+            )}
           </div>
           <div className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
             <div className="col-span-2 text-[10px] font-semibold text-slate-500 uppercase tracking-wider bg-yellow-50 p-1.5 rounded">Ours (Receiving) — {f.ours_type === 'bank' ? 'Bank' : 'Crypto'}</div>
@@ -358,7 +409,7 @@ export default function NewDealPage() {
           )}
           {f.buy_currency && f.sell_currency && f.currency_amount && f.rate && (
             <div className="bg-slate-50 p-3 rounded-md text-center font-mono text-sm font-medium text-[#08263e]">
-              {Number(f.currency_amount).toLocaleString()} {f.buy_currency} x {f.rate} = {Number(f.amount).toLocaleString()} {f.sell_currency}
+              {Number(f.currency_amount).toLocaleString()} {f.buy_currency} {isDivideMode ? '÷' : '×'} {f.rate} = {Number(f.amount).toLocaleString()} {f.sell_currency}
             </div>
           )}
           <DialogFooter className="gap-2">

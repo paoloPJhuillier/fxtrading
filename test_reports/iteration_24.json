@@ -1,0 +1,38 @@
+{
+  "summary": "Iter 24 - Verified all 9 FX Trading Tracker revision items end-to-end. Backend pytest (test_iter24_fx_revisions.py): 7/7 PASS - (a) GET /api/reference/transfer-types includes 'FX Bank Deal' alongside 3 existing types, all is_active=true; (b) POST /api/deals with transfer_type='FX Bank Deal' + blank to_type/to_company/to_bank/to_account_num returns 200/201 and the deal is fetchable via GET /api/deals/{id} with empty destination intact; (c) POST /api/deals Buy=PHP/Sell=USD/amount=50000/rate=56 accepted, server stores amount=892.857 (50000/56) without rejection; (d) GET /api/deals returns history[] entries with 'action' field on list rows, enabling the new Last Action column. Frontend Playwright on https://fx-deal-queue.preview.emergentagent.com: (1) Item 1 - Treasury Review dialog shows Client's Settlement section as view-only ('No client settlement proofs' placeholder, NO upload-client-proof-btn element) while Processor's Settlement keeps its Upload button. (2) Item 2 - /deals My Deals table headers = [Reference, Client, Type, Pair, Amount, Rate, Deal Date, Status, Last Action, Action]; rows show colored badges (created, confirmed, proof uploaded). (3+4) Item 3/4 - Buy=PHP/Sell=USD activates blue 'Auto-divide mode: Buy PHP / Rate = Converted Amount (SALE perspective)' info box; rate-summary renders '50,000 PHP \u00f7 56 = 892.86 USD' (\u00f7 only, no \u00d7); switching Buy=USD/Sell=PHP flips to '50,000 USD \u00d7 56 = 2,800,000 PHP' (\u00d7 only); converted amount input shows 892.86 (2-decimal). (5) Item 5 - Currency Amount input shows '50,000' comma-formatted helper below the field, Converted Amount field shows '892.86' / '2,800,000' via toLocaleString. (6) Item 6 - 'FX Bank Deal' selectable in transfer-type-select (via cmdk option). (7) Item 7 - Selecting FX Bank Deal hides full Destination (To) Card and renders 'Destination (To) is not applicable for FX Bank Deal' notice; switching back to FX Crypto Conversion restores Destination card. (8) Item 8 - Selecting FX Bank Deal hides Client's Settlement upload section in Settlement Proofs, rendering 'Client's Settlement is not applicable for FX Bank Deal'. (9) Item 9 - Treasury Review dialog for a no-proof deal: confirm-deal-btn is disabled AND 'Settlement proofs required to confirm' amber message is visible; processor upload button remains enabled to allow attaching a proof to unlock Confirm. No critical or blocking defects found.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter24_fx_revisions.py",
+    "/app/test_reports/pytest/iter24_fx_revisions.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py L902-909 reseed logic for transfer_types: deletes all and reinserts on every startup whenever either 'FX Crypto Conversion' or 'FX Bank Deal' is missing, but it runs delete_many on every restart in the affirmative path. Acceptable for a one-off migration; consider gating with a one-shot migration flag or upsert-by-name to preserve any admin edits to is_active or display names.",
+    "to_type/to_company/to_bank/to_account_num are now Optional but server-side validation does NOT enforce that they MUST be empty when transfer_type='FX Bank Deal'. A trader could submit FX Bank Deal with a to_company filled and it would be persisted. Add server-side rule: if transfer_type=='FX Bank Deal' then to_* fields are coerced to empty strings (or 422).",
+    "Same applies to Client's Settlement proofs for FX Bank Deal - frontend hides the UI, but a crafted POST could still attach client proofs. Backend should drop/ignore client_proofs when transfer_type=='FX Bank Deal'.",
+    "NewDealPage.jsx and EditDealPage.jsx duplicate the divide/multiply formula and conditional rendering for isFxBankDeal/isDivideMode. Extract to a shared hook (useDealFormulas) so future formula changes do not require parallel edits in two files.",
+    "Treasury Confirm-disabled-when-0-proofs is correct, but the disable condition `(clientProofs.length + processorProofs.length) === 0` does not distinguish FX Bank Deal (which has no client proofs by design). For an FX Bank Deal a single processor proof unlocks Confirm - intended, but worth documenting in code comment to avoid future regression.",
+    "DealsPage list table now exposes history[] for every row. For deals with long histories this inflates the list payload. Backend already projects 'history':1 on the list endpoint - consider truncating to last 3 entries server-side for the list response and returning the full array only on the detail GET."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter24_fx_revisions.py (new - 7 tests covering items 2, 6, and PHP-divide acceptance)"
+  ],
+  "success_rate": {
+    "backend": "100% (7/7 iter24 tests)",
+    "frontend": "100% (9/9 items - 1,2,3,4,5,6,7,8,9 + multiply-mode + switch-back-to-FX-Crypto checks all PASS)"
+  },
+  "test_credentials": "trader@fxtracker.com/Trader@123, treasury@fxtracker.com/Treasury@123 - verified",
+  "seed_data_creation": "Created 2 TEST_ FX deals via API (PHP/USD 50,000@56 = 892.857) and 1 FX Bank Deal with empty destination. These remain in DB as TEST_Acme Corporation pending deals.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "All 9 revision items verified. Key selectors: transfer-type-select (shadcn Select, options use div[role='option']), buy-currency-select/sell-currency-select (Popover+Command, options use [cmdk-item]/[role='option'] with buy-currency-search/sell-currency-search CommandInput), currency-amount-input, rate-input, amount-input, rate-summary, upload-client-proof-btn (now absent on Treasury TreasuryPage but still present on DealsPage/Trader edit), upload-processor-proof-btn, confirm-deal-btn (disabled when 0 proofs). Login API returns {token, user} - NOT access_token. /api/deals list returns {deals, total, page, pages} - NOT rows.",
+  "rca of the issue": "No bugs found in this iteration. All 9 items implemented correctly."
+}

@@ -219,7 +219,7 @@ export default function DealsPage() {
                   <TableHead>Reference</TableHead><TableHead>Client</TableHead><TableHead>Type</TableHead>
                   <TableHead>Pair</TableHead><TableHead className="text-right">Amount</TableHead>
                   <TableHead className="text-right">Rate</TableHead><TableHead>Deal Date</TableHead>
-                  <TableHead>Status</TableHead><TableHead>Action</TableHead>
+                  <TableHead>Status</TableHead><TableHead>Last Action</TableHead><TableHead>Action</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -449,6 +449,7 @@ function OursInfo({ deal }) {
 }
 
 const DealRow = memo(function DealRow({ deal, onView }) {
+  const lastAction = deal.history?.length > 0 ? deal.history[deal.history.length - 1] : null;
   return (
     <TableRow data-testid={`deal-row-${deal.id}`}>
       <TableCell className="font-mono text-xs font-medium text-[#08263e]">{deal.reference_number}</TableCell>
@@ -459,6 +460,15 @@ const DealRow = memo(function DealRow({ deal, onView }) {
       <TableCell className="text-right font-mono text-xs">{deal.rate}</TableCell>
       <TableCell className="text-xs">{format(new Date(deal.deal_date + 'T00:00:00'), 'dd MMM yyyy')}</TableCell>
       <TableCell><Badge className={SB[deal.status]}>{deal.status}</Badge></TableCell>
+      <TableCell className="text-[10px] text-slate-500 max-w-[120px]">
+        {lastAction ? (
+          <span title={lastAction.remarks || lastAction.action.replace(/_/g, ' ')}>
+            <Badge className={`${HISTORY_COLORS[lastAction.action] || 'bg-slate-100 text-slate-600'} text-[9px] px-1 py-0`}>
+              {lastAction.action.replace(/^deal_/, '').replace(/_/g, ' ')}
+            </Badge>
+          </span>
+        ) : '-'}
+      </TableCell>
       <TableCell>
         <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => onView(deal)} data-testid={`view-deal-${deal.id}`}>
           <Eye className="h-3.5 w-3.5" />
