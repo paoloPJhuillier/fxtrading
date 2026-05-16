@@ -1,4 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '@/lib/auth';
 import api from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -33,6 +35,8 @@ function StatCard({ label, count }) {
 }
 
 export default function SystemPage() {
+  const { user } = useAuth();
+  const navigate = useNavigate();
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showReset, setShowReset] = useState(false);
@@ -52,6 +56,12 @@ export default function SystemPage() {
   }, []);
 
   useEffect(() => { fetchStats(); }, [fetchStats]);
+
+  // Route guard: only sysadmin
+  if (user?.role !== 'sysadmin') {
+    navigate('/dashboard', { replace: true });
+    return null;
+  }
 
   const handleExport = async (entity, format) => {
     const id = `${entity}-${format}`;
@@ -200,13 +210,13 @@ export default function SystemPage() {
 
       {/* Reset Confirmation Dialog */}
       <Dialog open={showReset} onOpenChange={setShowReset}>
-        <DialogContent className="max-w-sm" data-testid="reset-confirm-dialog">
+        <DialogContent className="max-w-sm" data-testid="reset-confirm-dialog" aria-describedby="reset-desc">
           <DialogHeader>
             <DialogTitle className="text-[#ec474e] flex items-center gap-2">
               <AlertTriangle className="h-5 w-5" /> Confirm Database Reset
             </DialogTitle>
           </DialogHeader>
-          <div className="space-y-4">
+          <div className="space-y-4" id="reset-desc">
             <div className="p-3 bg-red-50 border border-red-200 rounded-md text-xs text-red-700 space-y-1">
               <p className="font-semibold">This action will permanently delete:</p>
               <ul className="list-disc ml-4 space-y-0.5">

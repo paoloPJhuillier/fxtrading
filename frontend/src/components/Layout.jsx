@@ -45,12 +45,14 @@ const navConfig = {
     { to: '/reports', icon: BarChart3, label: 'Reports' },
   ],
   sysadmin: [
-    { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-    { to: '/reference-data', icon: Database, label: 'Reference Data' },
-    { to: '/users', icon: Users, label: 'Users' },
-    { to: '/transactions', icon: History, label: 'Transactions' },
-    { to: '/audit-log', icon: Activity, label: 'Audit Trail' },
-    { to: '/reports', icon: BarChart3, label: 'Reports' },
+    ...([
+      { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+      { to: '/reference-data', icon: Database, label: 'Reference Data' },
+      { to: '/users', icon: Users, label: 'Users' },
+      { to: '/transactions', icon: History, label: 'Transactions' },
+      { to: '/audit-log', icon: Activity, label: 'Audit Trail' },
+      { to: '/reports', icon: BarChart3, label: 'Reports' },
+    ]),
     { to: '/system', icon: Settings, label: 'System' },
   ],
 };
