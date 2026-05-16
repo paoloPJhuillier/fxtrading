@@ -17,6 +17,7 @@ const pageImports = {
   TransactionHistory: () => import('@/pages/TransactionHistoryPage'),
   AuditLog: () => import('@/pages/AuditLogPage'),
   Reports: () => import('@/pages/ReportsPage'),
+  System: () => import('@/pages/SystemPage'),
 };
 
 const DashboardPage = lazy(pageImports.Dashboard);
@@ -29,6 +30,7 @@ const UsersPage = lazy(pageImports.Users);
 const TransactionHistoryPage = lazy(pageImports.TransactionHistory);
 const AuditLogPage = lazy(pageImports.AuditLog);
 const ReportsPage = lazy(pageImports.Reports);
+const SystemPage = lazy(pageImports.System);
 
 // Prefetch page chunks one at a time with delay to avoid network contention
 let prefetchTimer = null;
@@ -97,6 +99,7 @@ function AppRoutes() {
           <Route path="/transactions" element={<TransactionHistoryPage />} />
           <Route path="/audit-log" element={<AuditLogPage />} />
           <Route path="/reports" element={<ReportsPage />} />
+          <Route path="/system" element={<SystemPage />} />
         </Route>
       </Routes>
     </Suspense>

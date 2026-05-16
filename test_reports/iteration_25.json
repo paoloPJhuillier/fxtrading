@@ -1,0 +1,45 @@
+{
+  "summary": "Iteration 25 - System Administration (sysadmin role) feature verified end-to-end. Backend pytest test_sysadmin.py: 18/18 PASS covering (a) sysadmin login returns role=sysadmin; (b) GET /api/system/db-stats returns counts for all 9+2 collections as sysadmin (200) and 403 for admin & trader; (c) GET /api/system/export/{entity} works for deals (CSV+JSON), banks (JSON), bank_accounts (CSV), users (CSV header excludes password_hash); invalid entity returns 400; admin gets 403; (d) POST /api/system/db-reset returns 400 on wrong confirm, 403 for admin/trader, and on confirm='RESET DATABASE' wipes deals+audit_logs+counters while retaining users/companies/currencies counts (verified via pre/post db-stats); (e) sysadmin inherits admin perms - can list /api/users, /api/audit-logs, /api/reports/deal-blotter (all 200). Frontend Playwright on https://fx-deal-queue.preview.emergentagent.com: (1) sysadmin login succeeds, sidebar nav shows: Dashboard, Reference Data, Users, Transactions, Audit Trail, Reports, System (System present). (2) /system route renders system-page with Database Overview, Export Data, Danger Zone cards. (3) All 9 entities (deals, audit_logs, users, companies, banks, bank_accounts, currencies, transaction_types, transfer_types) have export-{entity}-csv and export-{entity}-json buttons. (4) Reset Database dialog: reset-confirm-btn disabled when empty, disabled with 'wrong text', enabled only when exactly 'RESET DATABASE' typed. (5) Admin sidebar nav does NOT include System (gated via roleConfig). Note: admin can still navigate to /system via direct URL - page renders shell but db-stats API returns 403 producing 'Failed to load database stats' toast (backend correctly enforces, but no client-side route guard).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/system as admin", "issues": ["Admin can navigate directly to /system via URL. Page UI renders (Export/Reset buttons visible) but every API call 403s and shows error toast. Recommend a client-side route guard (PrivateRoute checking role==='sysadmin') that redirects admin/trader to /dashboard. Backend security is correctly enforced (403); this is UX-only."]},
+      {"screen": "Reset Confirm Dialog", "issues": ["React console warning: 'Missing Description or aria-describedby for {DialogContent}' - add a DialogDescription or aria-describedby for accessibility compliance."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_sysadmin.py",
+    "/app/test_reports/pytest/iter25_sysadmin.xml"
+  ],
+  "action_items": [
+    "[Low/UX] Add client-side route guard on /system that redirects non-sysadmin users (admin/trader) to /dashboard - currently page renders shell + API 403 toast.",
+    "[Low/a11y] Add DialogDescription (or aria-describedby) to reset-confirm-dialog to silence Radix accessibility warning."
+  ],
+  "critical_code_review_comments": [
+    "server.py L1471-1515 - /api/system/export/{entity} loads up to 200,000 docs into memory then builds CSV in StringIO. For deals collection with audit data this can OOM under load. Consider streaming response (StreamingResponse) with a generator yielding rows, especially for audit_logs which can grow unbounded.",
+    "server.py L1499 skip_keys hardcoded to {settlement_proofs, history, password_hash}. Good for users/deals but if future entities add sensitive fields (e.g. api_keys, tokens) they will be exported. Consider declarative per-entity column allowlist instead of denylist.",
+    "server.py L1517-1526 db-stats does count_documents on 11 collections sequentially - on a large DB this is slow. Use asyncio.gather() to parallelize counts.",
+    "server.py L1448-1469 db-reset is irreversible and has no soft-delete/backup step. Recommend an automatic export of deals+audit_logs to /tmp or S3 before wipe so a sysadmin mistake is recoverable. At minimum, log the wiped counts to a persistent audit_logs entry BEFORE deleting audit_logs (currently audit is wiped without a final record).",
+    "SystemPage.jsx L60 uses responseType:'blob' for JSON exports too. The blob download works but the server returns proper Content-Disposition - consider opening JSON in a new tab for inspection rather than forcing download. Minor UX preference.",
+    "Layout.jsx L47-55 sysadmin nav duplicates admin nav + System. Refactor to spread admin items: sysadmin: [...roleConfig.admin, {to:'/system', icon:Settings, label:'System'}] to avoid drift when admin nav changes.",
+    "App.js L102 - /system route is not wrapped in a role-protecting component; rely solely on backend 403. Add <PrivateRoute requireRole='sysadmin'> wrapper."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_sysadmin.py (new - 18 tests)"
+  ],
+  "success_rate": {
+    "backend": "100% (18/18)",
+    "frontend": "100% (6/6 flows - sysadmin login, sidebar, /system render, 9 entity buttons, reset dialog gating, admin sidebar exclusion)"
+  },
+  "test_credentials": "sysadmin@fxtracker.com/SysAdmin@123, admin@fxtracker.com/Admin@123, trader@fxtracker.com/Trader@123 - all verified working.",
+  "seed_data_creation": "IMPORTANT: Backend test TestDbResetFunctional executed an ACTUAL POST /api/system/db-reset with confirm='RESET DATABASE'. This wiped all deals, audit_logs, counters, report_permissions from the DB. Users and reference data (companies/banks/bank_accounts/currencies/transaction_types/transfer_types) are intact. Any TEST_ deals from iteration 24 are gone. Next testing agent should re-create deals via API if needed for deal/treasury flow regression.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Sysadmin endpoints: POST /api/system/db-reset (body: {confirm:'RESET DATABASE'}), GET /api/system/export/{entity}?format=csv|json (entities: deals, audit_logs, users, companies, banks, bank_accounts, currencies, transaction_types, transfer_types), GET /api/system/db-stats. require_role() now grants sysadmin access whenever 'admin' is in allowed roles (server.py L193-200). Frontend selectors: system-page, refresh-stats-btn, export-{entity}-csv, export-{entity}-json, reset-db-btn, reset-confirm-dialog, reset-confirm-input, reset-confirm-btn. DB was reset during this test run so deals/audit collections start empty. Sysadmin sidebar includes System; admin sidebar does NOT.",
+  "rca of the issue": "No bugs blocking the feature. Two minor UX notes: (1) /system route lacks client-side role guard - admin can land on the page but backend returns 403 so data is never leaked; (2) Radix Dialog missing aria description for a11y."
+}

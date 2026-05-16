@@ -191,7 +191,11 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
         raise HTTPException(status_code=401, detail="Invalid token")
 
 async def require_role(user, roles):
-    if user["role"] not in roles:
+    # sysadmin has access to everything admin can do
+    effective_role = user["role"]
+    if effective_role == "sysadmin" and "admin" in roles:
+        return user
+    if effective_role not in roles:
         raise HTTPException(status_code=403, detail="Insufficient permissions")
     return user
 
@@ -853,6 +857,14 @@ async def seed_data():
             "is_active": True, "created_at": datetime.now(timezone.utc).isoformat()
         })
 
+    if not await db.users.find_one({"role": "sysadmin"}):
+        await db.users.insert_one({
+            "id": str(uuid.uuid4()), "email": "sysadmin@fxtracker.com", "first_name": "System", "last_name": "Administrator",
+            "password_hash": pwd_context.hash("SysAdmin@123"), "role": "sysadmin",
+            "is_active": True, "created_at": datetime.now(timezone.utc).isoformat()
+        })
+        logger.info("Created default sysadmin user")
+
     # Currencies
     if await db.currencies.count_documents({}) == 0:
         fiat = [
@@ -977,6 +989,8 @@ async def _get_report_permissions():
 
 async def _check_report_access(report_id: str, user: dict):
     """Check if user's role has access to a specific report."""
+    if user["role"] == "sysadmin":
+        return  # sysadmin has access to all reports
     perms = await _get_report_permissions()
     report_perms = perms.get(report_id, {})
     if not report_perms.get(user["role"], False):
@@ -984,9 +998,9 @@ async def _check_report_access(report_id: str, user: dict):
 
 @api_router.get("/reports/permissions")
 async def get_report_permissions(user=Depends(get_current_user)):
-    """Get report permissions for the current user's role (or all if admin)."""
+    """Get report permissions for the current user's role (or all if admin/sysadmin)."""
     perms = await _get_report_permissions()
-    if user["role"] == "admin":
+    if user["role"] in ("admin", "sysadmin"):
         return {"permissions": perms}
     # Non-admin: return only their own enabled reports
     role = user["role"]
@@ -1427,6 +1441,89 @@ async def database_status(user=Depends(get_current_user)):
         from services.database import SCOPE_MAP
         info["scopes"] = sorted(set(s for s, _ in SCOPE_MAP.values()))
     return info
+
+
+# --- System Administration (sysadmin only) ---
+
+@api_router.post("/system/db-reset")
+async def system_db_reset(req: dict, user=Depends(get_current_user)):
+    """Reset transactional data. Retains: users, reference data. Wipes: deals, audit_logs, counters, report_permissions."""
+    await require_role(user, ["sysadmin"])
+    confirm = req.get("confirm", "")
+    if confirm != "RESET DATABASE":
+        raise HTTPException(status_code=400, detail="Type 'RESET DATABASE' to confirm")
+
+    deal_count = await db.deals.count_documents({})
+    audit_count = await db.audit_logs.count_documents({})
+    await db.deals.delete_many({})
+    await db.audit_logs.delete_many({})
+    await db.counters.delete_many({})
+    await db.report_permissions.delete_many({})
+
+    logger.warning(f"DB RESET by {user['email']}: {deal_count} deals, {audit_count} audit logs wiped")
+
+    return {
+        "message": "Database reset complete",
+        "wiped": {"deals": deal_count, "audit_logs": audit_count, "counters": True, "report_permissions": True},
+        "retained": ["users", "companies", "banks", "bank_accounts", "currencies", "transaction_types", "transfer_types"]
+    }
+
+@api_router.get("/system/export/{entity}")
+async def system_export(entity: str, fmt: str = Query("csv", alias="format"), user=Depends(get_current_user)):
+    """Export data as CSV or JSON."""
+    await require_role(user, ["sysadmin"])
+
+    ALLOWED = {
+        "deals": db.deals, "audit_logs": db.audit_logs, "users": db.users,
+        "companies": db.companies, "banks": db.banks, "bank_accounts": db.bank_accounts,
+        "currencies": db.currencies, "transaction_types": db.transaction_types, "transfer_types": db.transfer_types,
+    }
+    if entity not in ALLOWED:
+        raise HTTPException(status_code=400, detail=f"Invalid entity. Allowed: {', '.join(ALLOWED.keys())}")
+
+    collection = ALLOWED[entity]
+    docs = await collection.find({}, {"_id": 0}).to_list(200000)
+
+    if fmt == "json":
+        import json as json_mod
+        content = json_mod.dumps(docs, indent=2, default=str)
+        return Response(content=content, media_type="application/json",
+                        headers={"Content-Disposition": f"attachment; filename={entity}_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M')}.json"})
+
+    if not docs:
+        return Response(content="", media_type="text/csv",
+                        headers={"Content-Disposition": f"attachment; filename={entity}_empty.csv"})
+    all_keys = set()
+    for d in docs:
+        all_keys.update(d.keys())
+    skip_keys = {"settlement_proofs", "history", "password_hash"}
+    csv_keys = sorted(k for k in all_keys if k not in skip_keys)
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(csv_keys)
+    for d in docs:
+        row = []
+        for k in csv_keys:
+            val = d.get(k, "")
+            if isinstance(val, (list, dict)):
+                import json as json_mod
+                val = json_mod.dumps(val, default=str)
+            row.append(val)
+        writer.writerow(row)
+    buf.seek(0)
+    return Response(content=buf.getvalue(), media_type="text/csv",
+                    headers={"Content-Disposition": f"attachment; filename={entity}_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M')}.csv"})
+
+@api_router.get("/system/db-stats")
+async def system_db_stats(user=Depends(get_current_user)):
+    """Get record counts for all collections."""
+    await require_role(user, ["sysadmin"])
+    stats = {}
+    for name in ["deals", "audit_logs", "users", "companies", "banks", "bank_accounts", "currencies", "transaction_types", "transfer_types", "counters", "report_permissions"]:
+        col = getattr(db, name, None)
+        if col:
+            stats[name] = await col.count_documents({})
+    return {"stats": stats}
 
 app.include_router(api_router)
 

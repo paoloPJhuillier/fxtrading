@@ -711,6 +711,8 @@ export default function ReportsPage() {
   const [permissions, setPermissions] = useState(null);
   const [showSettings, setShowSettings] = useState(false);
 
+  const isAdmin = role === 'admin' || role === 'sysadmin';
+
   // Fetch permissions on mount
   useEffect(() => {
     let cancelled = false;
@@ -725,9 +727,7 @@ export default function ReportsPage() {
     if (!permissions) return false;
     const rp = permissions[id];
     if (!rp) return false;
-    // For admin, the full permissions object is returned
-    if (role === 'admin') return rp.admin !== false;
-    // For other roles, check their specific role
+    if (isAdmin) return rp.admin !== false;
     return rp[role] === true;
   });
 
@@ -746,10 +746,10 @@ export default function ReportsPage() {
       <ReportSelector
         reports={visibleReports}
         onSelect={setActiveReport}
-        isAdmin={role === 'admin'}
+        isAdmin={isAdmin}
         onOpenSettings={() => setShowSettings(true)}
       />
-      {role === 'admin' && (
+      {isAdmin && (
         <PermissionsDialog open={showSettings} onClose={() => setShowSettings(false)} />
       )}
     </>

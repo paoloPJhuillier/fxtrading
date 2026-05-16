@@ -9,7 +9,7 @@ import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import {
   LayoutDashboard, FileText, PlusCircle, ClipboardCheck,
-  Database, Users, History, LogOut, Menu, TrendingUp, Activity, KeyRound, BarChart3
+  Database, Users, History, LogOut, Menu, TrendingUp, Activity, KeyRound, BarChart3, Settings
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -43,6 +43,15 @@ const navConfig = {
     { to: '/transactions', icon: History, label: 'Transactions' },
     { to: '/audit-log', icon: Activity, label: 'Audit Trail' },
     { to: '/reports', icon: BarChart3, label: 'Reports' },
+  ],
+  sysadmin: [
+    { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+    { to: '/reference-data', icon: Database, label: 'Reference Data' },
+    { to: '/users', icon: Users, label: 'Users' },
+    { to: '/transactions', icon: History, label: 'Transactions' },
+    { to: '/audit-log', icon: Activity, label: 'Audit Trail' },
+    { to: '/reports', icon: BarChart3, label: 'Reports' },
+    { to: '/system', icon: Settings, label: 'System' },
   ],
 };
 
