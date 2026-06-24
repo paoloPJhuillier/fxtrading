@@ -4,7 +4,7 @@
 - Trader: trader@fxtracker.com / Trader@123
 - Treasury: treasury@fxtracker.com / Treasury@123
 - Admin: admin@fxtracker.com / Admin@123
-- **System Admin**: sysadmin@fxtracker.com / SysAdmin@123
+- System Admin: sysadmin@fxtracker.com / SysAdmin@123
 
 ## Architecture
 - **Frontend**: React 19.0.0, React Router 7.5.1, TailwindCSS 3.4.17, Shadcn/UI
@@ -15,43 +15,37 @@
 ## Roles
 - **Trader**: Create deals, upload client proofs, view own deals, reports
 - **Treasury**: Process deals (confirm/return), upload processor proofs, reports
-- **Admin**: Manage users, reference data, audit trail, report permissions
+- **Admin**: Manage users, reference data (incl. counterparties), audit trail, report permissions
 - **System Admin (sysadmin)**: Everything admin can do + DB reset, DB export, DB stats
 
-## What's Been Implemented
+## What's Been Implemented (Summary)
+- Core Platform, Performance Optimizations, Bank Account Management, Deal History, Split Settlement Proofs, Returned Deal Edit Page
+- Switchable Storage (Emergent ↔ S3/Huawei OBS) and Database (MongoDB ↔ Couchbase Enterprise)
+- 8 Reports with server-side pagination, debounced filters, autocomplete comboboxes
+- Admin-configurable report permissions, YTD default dates
+- System Administration (sysadmin role, DB reset, DB export, DB stats)
+- FX Assessment 9 Revisions (Items 1-9 from Apr assessment)
 
-### Core Platform (Complete)
-### Performance Optimizations (Complete)
-### Bank Account Management (Complete - Mar 17, 2026)
-### Deal History Timeline (Complete - Mar 17, 2026)
-### Split Settlement Proofs (Complete - Mar 17, 2026)
-### Returned Deal Edit Page (Complete - Mar 17, 2026)
-### Switchable Storage Abstraction (Complete - Apr 24, 2026)
-### Switchable Database Abstraction (Complete - Apr 24, 2026)
-### Reports Feature (Complete - Apr 28, 2026)
-### Documentation (Complete - Apr 28, 2026)
-### FX Assessment Revisions (Complete - May 15, 2026)
+### User Feedback 10 Items (Complete - Jun 24, 2026)
+All 10 items from FX_Trading_Tracker_User_Feedback.xlsx implemented and tested:
 
-### System Administration (Complete - May 16, 2026)
-- New **sysadmin** role (separate from admin), auto-seeded on startup
-- **DB Stats**: GET /api/system/db-stats — record counts for all 11 collections
-- **DB Export**: GET /api/system/export/{entity}?format=csv|json — export any collection
-  - Entities: deals, audit_logs, users, companies, banks, bank_accounts, currencies, transaction_types, transfer_types
-  - CSV excludes sensitive fields (password_hash, settlement_proofs, history)
-  - JSON exports full data
-- **DB Reset**: POST /api/system/db-reset — type-to-confirm "RESET DATABASE"
-  - Wipes: deals, audit_logs, counters, report_permissions
-  - Retains: users, companies, banks, bank_accounts, currencies, transaction_types, transfer_types
-- sysadmin inherits all admin permissions (require_role check)
-- Client-side route guard on /system (redirects non-sysadmin to dashboard)
-- Tested: 18/18 backend + 6/6 frontend (100%)
+0. **Transaction Type → Buy/Sell**: Replaced Today/Tomorrow/Spot with Buy and Sell
+1. **Counterparty Reference Entity**: New collection with CRUD in admin UI (Counterparties tab). Seeded: CLSC, PJ, Verite
+2. **Source (From) → Counterparty**: For FX Local and FX-Intercompany, Company replaced with Counterparty dropdown
+3. **Ours Counterparty Display**: Shows "Counterparty: {name}" in Ours section when applicable
+4. **FX-Intercompany Transfer Type**: New transfer type seeded. Both Source and Destination show Counterparty
+5. **Dynamic Ours Label**: Renamed to "Selling Counterparty Ours (Receiving Account)" for FX-Intercompany
+6. **Buying Counterparty Ours**: New section with Bank/Account for FX-Intercompany deals. Backend model includes buying_ours_type/bank/account_num/wallet_address
+7. **Settlement Dual Lines**: FX-Intercompany deals show .1 (Sell) and .2 (Buy) reference suffixes
+8. **TMS Report (SAP)**: 21-column SAP mass upload format. Intercompany dual lines. CSV/JSON/PDF export
+9. **Simplified Currency**: Single dropdown (removed Sell Currency). Formula = Amount × Rate only (removed divide logic)
+
+Tested: 11/11 backend + 12/12 frontend (100%)
 
 ---
 
 ## Backlog / Future Tasks
 - **P1**: Backend refactoring — split server.py into /routes, /models, /services
-- **P1**: Extract shared deal formula to useDealFormulas hook (DRY)
-- **P2**: Streaming response for large exports (OOM prevention)
-- **P2**: Auto-backup before DB reset
+- **P2**: TMS pagination fix for intercompany row expansion
 - **P2**: Email notifications for deal status changes
 - **P2**: Scheduled report delivery
