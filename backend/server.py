@@ -67,17 +67,18 @@ class ChangePasswordRequest(BaseModel):
     new_password: str
 
 class DealCreate(BaseModel):
-    transaction_type: str
+    transaction_type: str  # "Buy" or "Sell"
     value_date: str
     deal_date: str
     transfer_type: str
     client_name: str
+    counterparty: Optional[str] = ""  # Used for FX Local / FX-Intercompany
     from_type: str  # "bank" or "crypto"
     from_company: str
     from_bank: Optional[str] = ""
     from_account_num: Optional[str] = ""
     from_wallet_address: Optional[str] = ""
-    to_type: Optional[str] = "bank"  # "bank" or "crypto"
+    to_type: Optional[str] = "bank"
     to_company: Optional[str] = ""
     to_bank: Optional[str] = ""
     to_account_num: Optional[str] = ""
@@ -86,8 +87,13 @@ class DealCreate(BaseModel):
     ours_bank: Optional[str] = ""
     ours_account_num: Optional[str] = ""
     ours_wallet_address: Optional[str] = ""
+    # Buying counterparty ours (FX-Intercompany only)
+    buying_ours_type: Optional[str] = "bank"
+    buying_ours_bank: Optional[str] = ""
+    buying_ours_account_num: Optional[str] = ""
+    buying_ours_wallet_address: Optional[str] = ""
     buy_currency: str
-    sell_currency: str
+    sell_currency: Optional[str] = ""
     currency_amount: float
     amount: float
     rate: float
@@ -418,7 +424,7 @@ async def list_deals(
         query.setdefault("deal_date", {})["$lte"] = date_to
     total = await db.deals.count_documents(query)
     skip = (page - 1) * limit
-    list_projection = {"_id": 0, "id": 1, "reference_number": 1, "client_name": 1, "transaction_type": 1, "transfer_type": 1, "buy_currency": 1, "sell_currency": 1, "currency_amount": 1, "amount": 1, "rate": 1, "deal_date": 1, "value_date": 1, "status": 1, "created_at": 1, "created_by_name": 1, "from_type": 1, "from_company": 1, "from_bank": 1, "from_account_num": 1, "from_wallet_address": 1, "to_type": 1, "to_company": 1, "to_bank": 1, "to_account_num": 1, "to_wallet_address": 1, "ours_type": 1, "ours_bank": 1, "ours_account_num": 1, "ours_wallet_address": 1, "remarks": 1, "treasury_remarks": 1, "cancellation_reason": 1, "processed_by_name": 1, "processed_at": 1, "settlement_proofs": 1, "history": 1}
+    list_projection = {"_id": 0, "id": 1, "reference_number": 1, "client_name": 1, "counterparty": 1, "transaction_type": 1, "transfer_type": 1, "buy_currency": 1, "sell_currency": 1, "currency_amount": 1, "amount": 1, "rate": 1, "deal_date": 1, "value_date": 1, "status": 1, "created_at": 1, "created_by_name": 1, "from_type": 1, "from_company": 1, "from_bank": 1, "from_account_num": 1, "from_wallet_address": 1, "to_type": 1, "to_company": 1, "to_bank": 1, "to_account_num": 1, "to_wallet_address": 1, "ours_type": 1, "ours_bank": 1, "ours_account_num": 1, "ours_wallet_address": 1, "buying_ours_type": 1, "buying_ours_bank": 1, "buying_ours_account_num": 1, "buying_ours_wallet_address": 1, "remarks": 1, "treasury_remarks": 1, "cancellation_reason": 1, "processed_by_name": 1, "processed_at": 1, "settlement_proofs": 1, "history": 1}
     deals = await db.deals.find(query, list_projection).sort("created_at", -1).skip(skip).limit(limit).to_list(limit)
     # Truncate history to last 3 entries for list performance
     for d in deals:
@@ -624,7 +630,8 @@ COLLECTION_MAP = {
     "banks": "banks",
     "transaction-types": "transaction_types",
     "transfer-types": "transfer_types",
-    "currencies": "currencies"
+    "currencies": "currencies",
+    "counterparties": "counterparties"
 }
 
 def get_col(entity_type: str):
@@ -915,24 +922,30 @@ async def seed_data():
         await db.currencies.insert_many(currencies)
         logger.info(f"Seeded {len(currencies)} currencies")
 
-    # Transaction types - always reseed with correct values
-    existing_tx = await db.transaction_types.find_one({"name": "Today"})
+    # Transaction types - Buy/Sell
+    existing_tx = await db.transaction_types.find_one({"name": "Buy"})
     if not existing_tx:
         await db.transaction_types.delete_many({})
-        types = [("Today", "TODAY"), ("Tomorrow", "TOM"), ("Spot", "SPOT")]
+        types = [("Buy", "BUY"), ("Sell", "SELL")]
         docs = [{"id": str(uuid.uuid4()), "name": n, "code": c, "is_active": True, "created_at": datetime.now(timezone.utc).isoformat()} for n, c in types]
         await db.transaction_types.insert_many(docs)
-        logger.info("Reseeded transaction types")
+        logger.info("Reseeded transaction types (Buy/Sell)")
 
-    # Transfer types - always reseed with correct values
-    existing_tf = await db.transfer_types.find_one({"name": "FX Crypto Conversion"})
-    existing_fxbd = await db.transfer_types.find_one({"name": "FX Bank Deal"})
-    if not existing_tf or not existing_fxbd:
+    # Transfer types
+    existing_interco = await db.transfer_types.find_one({"name": "FX-Intercompany"})
+    if not existing_interco:
         await db.transfer_types.delete_many({})
-        types = [("FX Crypto Conversion", "FX_CRYPTO"), ("FX Local", "FX_LOCAL"), ("PDAX Withdrawal", "PDAX_WD"), ("FX Bank Deal", "FX_BANK")]
+        types = [("FX Crypto Conversion", "FX_CRYPTO"), ("FX Local", "FX_LOCAL"), ("PDAX Withdrawal", "PDAX_WD"), ("FX Bank Deal", "FX_BANK"), ("FX-Intercompany", "FX_INTERCO")]
         docs = [{"id": str(uuid.uuid4()), "name": n, "code": c, "is_active": True, "created_at": datetime.now(timezone.utc).isoformat()} for n, c in types]
         await db.transfer_types.insert_many(docs)
-        logger.info("Reseeded transfer types (with FX Bank Deal)")
+        logger.info("Reseeded transfer types (with FX-Intercompany)")
+
+    # Counterparties
+    if await db.counterparties.count_documents({}) == 0:
+        counterparties = [("CLSC", "Cebuana Lhuillier Services Corp"), ("PJ", "PJ Lhuillier Inc"), ("Verite", "Verite Group")]
+        docs = [{"id": str(uuid.uuid4()), "code": c, "name": n, "is_active": True, "created_at": datetime.now(timezone.utc).isoformat()} for c, n in counterparties]
+        await db.counterparties.insert_many(docs)
+        logger.info("Seeded counterparties")
 
     # Companies
     if await db.companies.count_documents({}) == 0:
@@ -978,6 +991,7 @@ DEFAULT_REPORT_PERMISSIONS = {
     "user-activity": {"trader": False, "treasury": False, "admin": True},
     "volume-summary": {"trader": True, "treasury": True, "admin": True},
     "client-activity": {"trader": True, "treasury": True, "admin": True},
+    "tms": {"trader": True, "treasury": True, "admin": True},
 }
 
 async def _get_report_permissions():
@@ -1176,7 +1190,7 @@ async def report_settlement(
         deals, total = await _get_deals_for_report(dict(query), user, sf, sd, page, limit)
         rows = []
         for d in deals:
-            rows.append({
+            base = {
                 "value_date": (d.get("value_date") or "")[:10], "reference_number": d.get("reference_number", ""),
                 "client_name": d.get("client_name", ""), "buy_currency": d.get("buy_currency", ""),
                 "sell_currency": d.get("sell_currency", ""), "currency_amount": d.get("currency_amount"),
@@ -1184,7 +1198,15 @@ async def report_settlement(
                 "from_account_num": d.get("from_account_num", ""), "to_bank": d.get("to_bank", ""),
                 "to_account_num": d.get("to_account_num", ""),
                 "proofs": len(d.get("settlement_proofs", [])), "status": d.get("status", ""),
-            })
+                "transaction_type": d.get("transaction_type", ""),
+            }
+            if d.get("transfer_type") == "FX-Intercompany":
+                sell_line = {**base, "reference_number": base["reference_number"] + ".1", "transaction_type": "Sell"}
+                buy_line = {**base, "reference_number": base["reference_number"] + ".2", "transaction_type": "Buy"}
+                rows.append(sell_line)
+                rows.append(buy_line)
+            else:
+                rows.append(base)
         return {"rows": rows, "total": total, "page": page, "pages": (total + limit - 1) // limit if total > 0 else 1}
     deals, _ = await _get_deals_for_report(dict(query), user, sf, sd)
     if fmt == "pdf":
@@ -1418,6 +1440,91 @@ async def report_client_activity(
     return Response(content=csv_data, media_type="text/csv",
                     headers={"Content-Disposition": f"attachment; filename=client_activity_{datetime.now(timezone.utc).strftime('%Y%m%d')}.csv"})
 
+@api_router.get("/reports/tms")
+async def report_tms(
+    fmt: str = Query("csv", alias="format"),
+    date_from: Optional[str] = Query(None),
+    date_to: Optional[str] = Query(None),
+    page: int = Query(1, ge=1),
+    limit: int = Query(50, ge=1, le=500),
+    user=Depends(get_current_user)
+):
+    await _check_report_access("tms", user)
+    query = {}
+    if user["role"] == "trader":
+        query["created_by"] = user["id"]
+    if date_from:
+        query.setdefault("deal_date", {})["$gte"] = date_from
+    if date_to:
+        query.setdefault("deal_date", {})["$lte"] = date_to
+
+    if fmt == "json":
+        deals, total = await _get_deals_for_report(dict(query), user, "created_at", -1, page, limit)
+    else:
+        deals, total = await _get_deals_for_report(dict(query), user, "created_at", -1)
+
+    rows = []
+    for d in deals:
+        is_interco = d.get("transfer_type") == "FX-Intercompany"
+        base = {
+            "buy_or_trade": d.get("transaction_type", ""),
+            "type_of_transfer": d.get("transfer_type", ""),
+            "from_co": d.get("from_company", ""),
+            "from_bank": d.get("from_bank", ""),
+            "from_acct_no": d.get("from_account_num", ""),
+            "to_co": d.get("to_company", ""),
+            "to_bank": d.get("to_bank", ""),
+            "to_acct_no": d.get("to_account_num", ""),
+            "buy_curr": d.get("buy_currency", ""),
+            "sell_curr": d.get("sell_currency", ""),
+            "buy_fx_amt": d.get("currency_amount"),
+            "sell_fx_amt": d.get("amount"),
+            "ref_no": d.get("reference_number", ""),
+            "fx_partner": d.get("client_name", ""),
+            "rate": d.get("rate"),
+            "status": d.get("status", ""),
+            "remarks": d.get("remarks", ""),
+            "maker": d.get("created_by_name", ""),
+            "date_submitted": d.get("created_at", "")[:19].replace("T", " ") if d.get("created_at") else "",
+            "approver": d.get("processed_by_name", ""),
+            "date_authorized": d.get("deal_date", ""),
+        }
+        if is_interco:
+            sell_line = {**base, "ref_no": base["ref_no"] + ".1", "buy_or_trade": "Sell"}
+            buy_line = {**base, "ref_no": base["ref_no"] + ".2", "buy_or_trade": "Buy"}
+            rows.append(sell_line)
+            rows.append(buy_line)
+        else:
+            rows.append(base)
+
+    dr = _date_range_label(date_from, date_to)
+    if fmt == "json":
+        return {"rows": rows, "total": total or len(rows), "page": page, "pages": ((total or len(rows)) + limit - 1) // limit if (total or len(rows)) > 0 else 1}
+
+    # CSV
+    headers = ["Buy or Trade", "Type of Transfer", "From Co", "From Bank", "From Acct No",
+               "To Co", "To Bank", "To Acct No", "Buy Curr", "Sell Curr",
+               "Buy FX Amt", "Sell FX Amt", "Ref. No", "FX Partner", "Rate",
+               "Status", "Remarks", "Maker", "Date Submitted", "Approver", "Date Authorized"]
+    keys = ["buy_or_trade", "type_of_transfer", "from_co", "from_bank", "from_acct_no",
+            "to_co", "to_bank", "to_acct_no", "buy_curr", "sell_curr",
+            "buy_fx_amt", "sell_fx_amt", "ref_no", "fx_partner", "rate",
+            "status", "remarks", "maker", "date_submitted", "approver", "date_authorized"]
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(headers)
+    for r in rows:
+        writer.writerow([r.get(k, "") for k in keys])
+    buf.seek(0)
+    if fmt == "pdf":
+        # For TMS, CSV is the primary format; PDF uses the settlement PDF generator
+        buf_pdf = rpt.tms_pdf(rows, dr) if hasattr(rpt, 'tms_pdf') else None
+        if buf_pdf:
+            return Response(content=buf_pdf.read(), media_type="application/pdf",
+                            headers={"Content-Disposition": f"attachment; filename=tms_report_{datetime.now(timezone.utc).strftime('%Y%m%d')}.pdf"})
+    return Response(content=buf.getvalue(), media_type="text/csv",
+                    headers={"Content-Disposition": f"attachment; filename=tms_report_{datetime.now(timezone.utc).strftime('%Y%m%d')}.csv"})
+
 @api_router.get("/storage/status")
 async def storage_status(user=Depends(get_current_user)):
     await require_role(user, ["admin"])
@@ -1477,6 +1584,7 @@ async def system_export(entity: str, fmt: str = Query("csv", alias="format"), us
         "deals": db.deals, "audit_logs": db.audit_logs, "users": db.users,
         "companies": db.companies, "banks": db.banks, "bank_accounts": db.bank_accounts,
         "currencies": db.currencies, "transaction_types": db.transaction_types, "transfer_types": db.transfer_types,
+        "counterparties": db.counterparties,
     }
     if entity not in ALLOWED:
         raise HTTPException(status_code=400, detail=f"Invalid entity. Allowed: {', '.join(ALLOWED.keys())}")

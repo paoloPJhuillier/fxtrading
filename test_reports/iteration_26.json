@@ -1,0 +1,39 @@
+{
+  "summary": "Iteration 26 - FX Tracker 10 feedback items (0-9) end-to-end verified. Backend pytest test_iter26_fx_revisions.py: 11/11 PASS. (0) GET /api/reference/transaction-types returns exactly ['Buy','Sell'] (old Today/Tomorrow/Spot removed). (1) GET /api/reference/counterparties returns CLSC, PJ, Verite; POST as admin creates new counterparty (200) and trader receives 403. (4) GET /api/reference/transfer-types includes FX-Intercompany (alongside FX Crypto Conversion, FX Local, PDAX Withdrawal, FX Bank Deal). (6) POST /api/deals with transfer_type=FX-Intercompany persists both ours_* (selling) and buying_ours_* fields; GET /api/deals/{id} returns buying_ours_bank and buying_ours_account_num='2222222222' separate from ours_account_num='1111111111'. (7) GET /api/reports/settlement?format=json emits dual rows for the Interco deal with reference_number suffixes .1 (transaction_type=Sell) and .2 (transaction_type=Buy). (8) GET /api/reports/tms?format=json returns rows with the full TMS schema (buy_or_trade, type_of_transfer, from_co, from_bank, from_acct_no, to_co, to_bank, to_acct_no, buy_curr, sell_curr, buy_fx_amt, sell_fx_amt, ref_no, fx_partner, rate, status, remarks, maker, date_submitted, approver, date_authorized); Interco rows split into .1 (Sell) and .2 (Buy); GET /api/reports/tms?format=csv returns text/csv with exact 21 SAP headers in the prescribed order. Frontend Playwright on https://fx-deal-queue.preview.emergentagent.com: trader login ok; /deals/new renders new-deal-page; Transaction Type dropdown shows ['Buy','Sell'] only; Transfer Type dropdown includes FX-Intercompany; selecting FX Local replaces Company with Counterparty; selecting FX-Intercompany renders both 'Selling Counterparty Ours (Receiving Account)' and 'Buying Counterparty Ours (Receiving Account)' sections with buying-ours-bank-search testid; Amounts & Currency has a single Currency dropdown (no sell-currency control), and rate calculation is multiply-only (1000 x 56.5 -> 56,500.00). /reports shows TMS Report (SAP) card. Admin /reference-data has a Counterparties tab listing seed CLSC/PJ/Verite. No blocking issues found.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter26_fx_revisions.py",
+    "/app/test_reports/pytest/iter26_fx_revisions.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "backend/server.py L1502 - TMS pagination math uses (total or len(rows)) which double-counts when interco deal expansion produces 2 rows per deal: 'total' from _get_deals_for_report is deal count but 'rows' is post-expansion. Pages calc inconsistent for interco-heavy result sets. Consider returning 'total_rows' (expanded) alongside 'total' (deals) for clarity, or paginate AFTER expansion.",
+    "backend/server.py L1519-1524 - TMS PDF branch only runs if rpt.tms_pdf exists; if not, server returns CSV with format=pdf request silently. Should raise 400 if PDF requested but generator missing, or build a pdf via reportlab on the fly.",
+    "backend/server.py L1177 - Settlement query is {'$or': [{status: confirmed}, {status: pending}]}; cancelled/expired deals never appear which is intentional, but combined with date_from/date_to merged via setdefault('value_date',{}) the $or + value_date filter both apply only to the *outer* doc and value_date filter is fine but the constructed query mutates a shared dict reference (deepcopy not used) — fine here because dict() shallow copy is taken before _get_deals_for_report, but worth a comment.",
+    "backend/server.py L1488 - date_submitted slices created_at[:19].replace('T',' ') without timezone handling. For SAP TMS uploads the timezone (UTC) is significant; consider explicit 'YYYY-MM-DD HH:MM:SS UTC' or keep ISO.",
+    "backend/server.py L1492-1496 - Interco dual-line generation duplicates _all_ fields including amount, rate, currencies. For SAP TMS, line .1 (Sell) typically uses sell_currency/sell_fx_amt and line .2 (Buy) uses buy_currency/buy_fx_amt as the primary leg. Currently both lines carry identical amount columns which may not match SAP mass-upload expectations. Confirm with business whether amounts should be swapped or zeroed on the opposite leg.",
+    "backend/server.py L944-948 - Counterparty seeding only runs when count == 0. If an admin deletes all counterparties intentionally the next startup will reseed unexpectedly. Use a version flag (like the transaction_types reseed at L926) or check a 'seeded' marker.",
+    "frontend NewDealPage.jsx L257 vs L284 - both Source and Destination render the same SearchSelect bound to f.counterparty (single state). For FX-Intercompany the destination counterparty dropdown writes to the same field as source, so selecting on the To side overwrites the From side. Confirm intentional (single counterparty per Interco deal) — if not, model needs a second field (to_counterparty)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter26_fx_revisions.py (new - 11 tests covering items 0,1,4,6,7,8)"
+  ],
+  "success_rate": {
+    "backend": "100% (11/11)",
+    "frontend": "100% (12/12 UI flows: login, new-deal-page, single currency, Buy/Sell options, FX-Intercompany option, FX Local counterparty source, Interco selling+buying sections, buying ours fields, multiply formula, TMS card, refdata Counterparties tab, CLSC seed visible)"
+  },
+  "test_credentials": "trader@fxtracker.com/Trader@123, admin@fxtracker.com/Admin@123 - both verified working. Login API returns {token, user} (not access_token).",
+  "seed_data_creation": "Created 1 TEST_INTERCO deal via POST /api/deals (transfer_type=FX-Intercompany, client_name=TEST_INTERCO_CLIENT, currency_amount=100000, rate=56.5) to validate items 6/7/8. Created and deleted one TEST_CP_<rand> counterparty during item 1 testing. No cleanup of the interco deal (kept for retest).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Auth: POST /api/auth/login returns {'token':..., 'user':{...}} (NOT 'access_token'). Counterparty endpoints: GET/POST/PUT/DELETE /api/reference/counterparties (admin gated for write). DealCreate model has optional fields: counterparty, buying_ours_type/bank/account_num/wallet_address. /api/reports/settlement?format=json now emits ref_number.1 (Sell) + ref_number.2 (Buy) for transfer_type=FX-Intercompany. /api/reports/tms supports format=json|csv|pdf and applies the same .1/.2 split. Frontend selectors: transaction-type-select, transfer-type-select, counterparty trigger (SearchSelect tid='counterparty'/'to-counterparty'), buying-ours-bank-search/buying-ours-account-num-input, ours-counterparty-display, rate-summary, amount-input, single buy-currency selector (no sell-currency in UI). Route is /reference-data (not /reference).",
+  "rca of the issue": "No bugs found. All 10 feedback items (0-9) verified working at both API and UI layer."
+}

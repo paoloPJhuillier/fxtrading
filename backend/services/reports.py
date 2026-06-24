@@ -381,3 +381,33 @@ def client_activity_pdf(clients, date_range):
     t.setStyle(_table_style(len(headers)))
     elems.append(t)
     return _build_pdf("Client Activity", date_range, elems, landscape_mode=False)
+
+
+# ── Report 8: TMS (SAP Mass Upload) ─────────────────────────────────────────
+
+def tms_pdf(rows, date_range):
+    ss = _styles()
+    elems = []
+    elems.append(Paragraph("TMS Report — SAP Mass Upload", ss["ReportTitle"]))
+    elems.append(Paragraph(f"Period: {date_range}  |  Entries: {len(rows)}", ss["ReportSub"]))
+
+    headers = ["Buy/Trade", "Transfer", "From Co", "From Bank", "To Co", "To Bank",
+               "Buy Curr", "Sell Curr", "Buy Amt", "Sell Amt", "Ref#", "FX Partner", "Rate", "Status", "Maker"]
+    data = [headers]
+    for r in rows:
+        data.append([
+            r.get("buy_or_trade", ""), r.get("type_of_transfer", "")[:12],
+            r.get("from_co", "")[:15], r.get("from_bank", "")[:10],
+            r.get("to_co", "")[:15], r.get("to_bank", "")[:10],
+            r.get("buy_curr", ""), r.get("sell_curr", ""),
+            _fmt_num(r.get("buy_fx_amt")), _fmt_num(r.get("sell_fx_amt")),
+            r.get("ref_no", ""), r.get("fx_partner", "")[:15],
+            _fmt_num(r.get("rate"), 4), r.get("status", "").upper(),
+            r.get("maker", "")[:12],
+        ])
+
+    col_widths = [35, 45, 52, 42, 52, 42, 30, 30, 48, 48, 60, 52, 38, 38, 45]
+    t = Table(data, colWidths=col_widths, repeatRows=1)
+    t.setStyle(_table_style(len(headers)))
+    elems.append(t)
+    return _build_pdf("TMS Report", date_range, elems)

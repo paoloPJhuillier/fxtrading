@@ -24,7 +24,7 @@ export default function NewDealPage() {
   const clientProofRef = useRef(null);
   const processorProofRef = useRef(null);
   const { data: ref } = useRefData();
-  const safeRef = ref || { companies: [], banks: [], txTypes: [], tfTypes: [], currencies: [] };
+  const safeRef = ref || { companies: [], banks: [], txTypes: [], tfTypes: [], currencies: [], counterparties: [] };
 
   const [heavyReady, setHeavyReady] = useState(false);
   useEffect(() => {
@@ -33,45 +33,54 @@ export default function NewDealPage() {
   }, []);
 
   const [f, setF] = useState({
-    transaction_type: '', transfer_type: '', client_name: '',
+    transaction_type: '', transfer_type: '', client_name: '', counterparty: '',
     deal_date: new Date(), value_date: new Date(),
     from_type: 'bank', from_company: '', from_bank: '', from_account_num: '', from_wallet_address: '',
     to_type: 'bank', to_company: '', to_bank: '', to_account_num: '', to_wallet_address: '',
     ours_type: 'bank', ours_bank: '', ours_account_num: '', ours_wallet_address: '',
+    buying_ours_type: 'bank', buying_ours_bank: '', buying_ours_account_num: '', buying_ours_wallet_address: '',
     buy_currency: '', sell_currency: '',
     currency_amount: '', amount: '', rate: '', remarks: ''
   });
 
   const isFxBankDeal = f.transfer_type === 'FX Bank Deal';
-  const isDivideMode = f.buy_currency === 'PHP' && f.sell_currency && f.sell_currency !== 'PHP';
+  const isFxLocal = f.transfer_type === 'FX Local';
+  const isFxInterco = f.transfer_type === 'FX-Intercompany';
+  const showCounterparty = isFxLocal || isFxInterco;
+  const showDestination = !isFxBankDeal;
+  const showBuyingOurs = isFxInterco;
+
+  // Dynamic Ours label
+  const oursLabel = isFxInterco ? 'Selling Counterparty Ours (Receiving Account)' : 'Ours (Receiving Account)';
 
   const up = useCallback((k, v) => {
     setF(p => {
       const next = { ...p, [k]: v };
-      // When transfer type changes to FX Bank Deal, clear destination fields
-      if (k === 'transfer_type' && v === 'FX Bank Deal') {
-        next.to_type = 'bank'; next.to_company = ''; next.to_bank = '';
-        next.to_account_num = ''; next.to_wallet_address = '';
+      // When transfer type changes, reset conditional fields
+      if (k === 'transfer_type') {
+        if (v === 'FX Bank Deal') {
+          next.to_type = 'bank'; next.to_company = ''; next.to_bank = '';
+          next.to_account_num = ''; next.to_wallet_address = '';
+        }
+        if (v !== 'FX-Intercompany') {
+          next.buying_ours_type = 'bank'; next.buying_ours_bank = '';
+          next.buying_ours_account_num = ''; next.buying_ours_wallet_address = '';
+        }
       }
-      // Auto-compute amount: use ÷ when Buy=PHP, × otherwise
-      if (k === 'currency_amount' || k === 'rate' || k === 'buy_currency' || k === 'sell_currency') {
+      // Auto-compute: Amount = Currency Amount × Rate (always multiply)
+      if (k === 'currency_amount' || k === 'rate') {
         const ca = parseFloat(k === 'currency_amount' ? v : next.currency_amount) || 0;
         const r = parseFloat(k === 'rate' ? v : next.rate) || 0;
-        const buyPHP = (k === 'buy_currency' ? v : next.buy_currency) === 'PHP';
-        const sellOther = (k === 'sell_currency' ? v : next.sell_currency) && (k === 'sell_currency' ? v : next.sell_currency) !== 'PHP';
-        const divide = buyPHP && sellOther;
-        if (ca > 0 && r > 0) {
-          next.amount = divide ? (ca / r).toFixed(2) : (ca * r).toFixed(2);
-        } else {
-          next.amount = '';
-        }
+        next.amount = (ca > 0 && r > 0) ? (ca * r).toFixed(2) : '';
       }
       if (k === 'from_type') { next.from_bank = ''; next.from_account_num = ''; next.from_wallet_address = ''; }
       if (k === 'to_type') { next.to_bank = ''; next.to_account_num = ''; next.to_wallet_address = ''; }
       if (k === 'ours_type') { next.ours_bank = ''; next.ours_account_num = ''; next.ours_wallet_address = ''; }
+      if (k === 'buying_ours_type') { next.buying_ours_bank = ''; next.buying_ours_account_num = ''; next.buying_ours_wallet_address = ''; }
       if (k === 'from_bank') { next.from_account_num = ''; }
       if (k === 'to_bank') { next.to_account_num = ''; }
       if (k === 'ours_bank') { next.ours_account_num = ''; }
+      if (k === 'buying_ours_bank') { next.buying_ours_account_num = ''; }
       return next;
     });
     setErrors(p => p[k] ? { ...p, [k]: null } : p);
@@ -85,10 +94,10 @@ export default function NewDealPage() {
 
   const validate = () => {
     const errs = {};
-    const base = ['transaction_type', 'transfer_type', 'client_name', 'from_company', 'buy_currency', 'sell_currency', 'currency_amount', 'rate'];
-    if (f.transfer_type !== 'FX Bank Deal') {
-      base.push('to_company');
-    }
+    const base = ['transaction_type', 'transfer_type', 'client_name', 'buy_currency', 'currency_amount', 'rate'];
+    if (showCounterparty) base.push('counterparty');
+    if (!showCounterparty) base.push('from_company');
+    if (showDestination && !showCounterparty) base.push('to_company');
     base.forEach(k => { if (!f[k]) errs[k] = 'Required'; });
     if (!f.deal_date) errs.deal_date = 'Required';
     if (!f.value_date) errs.value_date = 'Required';
@@ -96,8 +105,7 @@ export default function NewDealPage() {
       if (!f.from_bank) errs.from_bank = 'Required';
       if (!f.from_account_num) errs.from_account_num = 'Required';
     } else { if (!f.from_wallet_address) errs.from_wallet_address = 'Required'; }
-    // Skip destination validation for FX Bank Deal
-    if (f.transfer_type !== 'FX Bank Deal') {
+    if (showDestination) {
       if (f.to_type === 'bank') {
         if (!f.to_bank) errs.to_bank = 'Required';
         if (!f.to_account_num) errs.to_account_num = 'Required';
@@ -107,6 +115,12 @@ export default function NewDealPage() {
       if (!f.ours_bank) errs.ours_bank = 'Required';
       if (!f.ours_account_num) errs.ours_account_num = 'Required';
     } else { if (!f.ours_wallet_address) errs.ours_wallet_address = 'Required'; }
+    if (showBuyingOurs) {
+      if (f.buying_ours_type === 'bank') {
+        if (!f.buying_ours_bank) errs.buying_ours_bank = 'Required';
+        if (!f.buying_ours_account_num) errs.buying_ours_account_num = 'Required';
+      } else { if (!f.buying_ours_wallet_address) errs.buying_ours_wallet_address = 'Required'; }
+    }
     setErrors(errs);
     return Object.keys(errs).length === 0;
   };
@@ -209,30 +223,22 @@ export default function NewDealPage() {
           <Card>
             <CardHeader><CardTitle className="text-base text-[#08263e]" style={{ fontFamily: 'Chivo' }}>Amounts & Currency</CardTitle></CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <CurrSel label="Buy Currency" value={f.buy_currency} name="buy_currency" onChange={up} fiat={fiat} stablecoin={stablecoin} crypto={crypto} tid="buy-currency" error={errors.buy_currency} />
-                <CurrSel label="Sell Currency" value={f.sell_currency} name="sell_currency" onChange={up} fiat={fiat} stablecoin={stablecoin} crypto={crypto} tid="sell-currency" error={errors.sell_currency} />
-              </div>
-              {isDivideMode && (
-                <div className="bg-blue-50 border border-blue-200 p-2 rounded-md">
-                  <p className="text-[10px] text-blue-600 font-medium">Auto-divide mode: Buy PHP / Rate = Converted Amount (SALE perspective)</p>
-                </div>
-              )}
+              <CurrSel label="Currency" value={f.buy_currency} name="buy_currency" onChange={up} fiat={fiat} stablecoin={stablecoin} crypto={crypto} tid="buy-currency" error={errors.buy_currency} />
               <div className="grid grid-cols-3 gap-4">
-                <VField label={`Currency Amount${f.buy_currency ? ` (${f.buy_currency})` : ''}`} error={errors.currency_amount}>
+                <VField label="Currency Amount" error={errors.currency_amount}>
                   <Input name="currency_amount" type="text" inputMode="decimal" value={f.currency_amount} onChange={e => { const v = e.target.value.replace(/[^0-9.]/g, ''); up('currency_amount', v); }} placeholder="0.00" data-testid="currency-amount-input" className={errors.currency_amount ? 'border-red-400' : ''} />
                   {f.currency_amount && <p className="text-[10px] text-slate-400 mt-0.5 font-mono">{Number(f.currency_amount).toLocaleString()}</p>}
                 </VField>
                 <VField label="Exchange Rate" error={errors.rate}>
                   <Input name="rate" type="text" inputMode="decimal" value={f.rate} onChange={e => { const v = e.target.value.replace(/[^0-9.]/g, ''); up('rate', v); }} placeholder="0.000000" data-testid="rate-input" className={errors.rate ? 'border-red-400' : ''} />
                 </VField>
-                <VField label={`Converted Amount${f.sell_currency ? ` (${f.sell_currency})` : ''}`}>
+                <VField label="Converted Amount">
                   <Input type="text" value={f.amount ? Number(f.amount).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}) : ''} readOnly className="bg-slate-50 font-medium" placeholder="0.00" data-testid="amount-input" />
                 </VField>
               </div>
-              {f.buy_currency && f.sell_currency && f.currency_amount && f.rate && (
+              {f.buy_currency && f.currency_amount && f.rate && (
                 <p className="text-xs text-slate-400 font-mono" data-testid="rate-summary">
-                  {Number(f.currency_amount).toLocaleString()} {f.buy_currency} {isDivideMode ? '÷' : '×'} {f.rate} = {Number(f.amount).toLocaleString()} {f.sell_currency}
+                  {Number(f.currency_amount).toLocaleString()} {f.buy_currency} x {f.rate} = {Number(f.amount).toLocaleString()} Converted
                 </p>
               )}
             </CardContent>
@@ -247,7 +253,11 @@ export default function NewDealPage() {
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
-              <SearchSelect label="Company" value={f.from_company} name="from_company" onChange={up} items={safeRef.companies} displayKey="name" tid="from-company" placeholder="Search company..." error={errors.from_company} />
+              {showCounterparty ? (
+                <SearchSelect label="Counterparty" value={f.counterparty} name="counterparty" onChange={up} items={safeRef.counterparties} displayKey="name" tid="counterparty" placeholder="Search counterparty..." error={errors.counterparty} />
+              ) : (
+                <SearchSelect label="Company" value={f.from_company} name="from_company" onChange={up} items={safeRef.companies} displayKey="name" tid="from-company" placeholder="Search company..." error={errors.from_company} />
+              )}
               {f.from_type === 'bank' ? (
                 <>
                   <SearchSelect label="Bank" value={f.from_bank} name="from_bank" onChange={up} items={safeRef.banks} displayKey="name" tid="from-bank" placeholder="Search bank..." error={errors.from_bank} />
@@ -261,7 +271,7 @@ export default function NewDealPage() {
             </CardContent>
           </Card>
 
-          {!isFxBankDeal && (
+          {showDestination && (
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
@@ -270,7 +280,11 @@ export default function NewDealPage() {
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
-              <SearchSelect label="Company" value={f.to_company} name="to_company" onChange={up} items={safeRef.companies} displayKey="name" tid="to-company" placeholder="Search company..." error={errors.to_company} />
+              {(isFxInterco) ? (
+                <SearchSelect label="Counterparty" value={f.counterparty || ''} name="counterparty" onChange={up} items={safeRef.counterparties} displayKey="name" tid="to-counterparty" placeholder="Search counterparty..." />
+              ) : (
+                <SearchSelect label="Company" value={f.to_company} name="to_company" onChange={up} items={safeRef.companies} displayKey="name" tid="to-company" placeholder="Search company..." error={errors.to_company} />
+              )}
               {f.to_type === 'bank' ? (
                 <>
                   <SearchSelect label="Bank" value={f.to_bank} name="to_bank" onChange={up} items={safeRef.banks} displayKey="name" tid="to-bank" placeholder="Search bank..." error={errors.to_bank} />
@@ -285,7 +299,7 @@ export default function NewDealPage() {
           </Card>
           )}
 
-          {isFxBankDeal && (
+          {!showDestination && (
             <Card className="border-dashed border-slate-300 bg-slate-50/50">
               <CardContent className="py-8 text-center">
                 <p className="text-xs text-slate-400">Destination (To) is not applicable for FX Bank Deal</p>
@@ -300,8 +314,11 @@ export default function NewDealPage() {
           <CardHeader>
             <div className="flex items-center justify-between">
               <div>
-                <CardTitle className="text-base text-[#08263e]" style={{ fontFamily: 'Chivo' }}>Ours (Receiving Account)</CardTitle>
+                <CardTitle className="text-base text-[#08263e]" style={{ fontFamily: 'Chivo' }}>{oursLabel}</CardTitle>
                 <p className="text-xs text-slate-400 mt-1">Account where the client credits us</p>
+                {showCounterparty && f.counterparty && (
+                  <p className="text-xs text-[#518dca] font-medium mt-1" data-testid="ours-counterparty-display">Counterparty: {f.counterparty}</p>
+                )}
               </div>
               <TypeToggle value={f.ours_type} name="ours_type" onChange={up} testId="ours-type" />
             </div>
@@ -321,6 +338,34 @@ export default function NewDealPage() {
             </div>
           </CardContent>
         </Card>
+
+        {showBuyingOurs && (
+        <Card className="mt-6">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-base text-[#08263e]" style={{ fontFamily: 'Chivo' }}>Buying Counterparty Ours (Receiving Account)</CardTitle>
+                <p className="text-xs text-slate-400 mt-1">Buying counterparty's receiving account</p>
+              </div>
+              <TypeToggle value={f.buying_ours_type} name="buying_ours_type" onChange={up} testId="buying-ours-type" />
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {f.buying_ours_type === 'bank' ? (
+                <>
+                  <SearchSelect label="Bank" value={f.buying_ours_bank} name="buying_ours_bank" onChange={up} items={safeRef.banks} displayKey="name" tid="buying-ours-bank" placeholder="Search bank..." error={errors.buying_ours_bank} />
+                  <BankAccountSelect bankName={f.buying_ours_bank} value={f.buying_ours_account_num} name="buying_ours_account_num" onChange={up} banks={safeRef.banks} tid="buying-ours-account" error={errors.buying_ours_account_num} />
+                </>
+              ) : (
+                <VField label="Wallet Address" error={errors.buying_ours_wallet_address}>
+                  <Input name="buying_ours_wallet_address" value={f.buying_ours_wallet_address} onChange={onInput} placeholder="Enter crypto wallet address" data-testid="buying-ours-wallet-input" className={errors.buying_ours_wallet_address ? 'border-red-400' : ''} />
+                </VField>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+        )}
 
         <Card className="mt-6">
           <CardContent className="pt-6">
@@ -385,12 +430,12 @@ export default function NewDealPage() {
             {f.from_type === 'bank' ? (<><CR label="Bank" val={f.from_bank} /><CR label="Account Number" val={f.from_account_num} mono /></>) : (<CR label="Wallet Address" val={f.from_wallet_address} mono />)}
           </div>
           <div className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
-            {isFxBankDeal ? (
+            {!showDestination ? (
               <div className="col-span-2 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Destination (To) — N/A (FX Bank Deal)</div>
             ) : (
               <>
                 <div className="col-span-2 text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Destination (To) — {f.to_type === 'bank' ? 'Bank' : 'Crypto'}</div>
-                <CR label="Company" val={f.to_company} />
+                {isFxInterco ? <CR label="Counterparty" val={f.counterparty} /> : <CR label="Company" val={f.to_company} />}
                 {f.to_type === 'bank' ? (<><CR label="Bank" val={f.to_bank} /><CR label="Account Number" val={f.to_account_num} mono /></>) : (<CR label="Wallet Address" val={f.to_wallet_address} mono />)}
               </>
             )}
@@ -407,9 +452,9 @@ export default function NewDealPage() {
               {processorProofFiles.length > 0 && <><p className="text-[10px] text-blue-600 font-medium mt-1">Processor's Settlement:</p>{processorProofFiles.map((pf, i) => <p key={`p${i}`} className="text-[10px] text-blue-500 truncate">{pf.name}</p>)}</>}
             </div>
           )}
-          {f.buy_currency && f.sell_currency && f.currency_amount && f.rate && (
+          {f.buy_currency && f.currency_amount && f.rate && (
             <div className="bg-slate-50 p-3 rounded-md text-center font-mono text-sm font-medium text-[#08263e]">
-              {Number(f.currency_amount).toLocaleString()} {f.buy_currency} {isDivideMode ? '÷' : '×'} {f.rate} = {Number(f.amount).toLocaleString()} {f.sell_currency}
+              {Number(f.currency_amount).toLocaleString()} {f.buy_currency} x {f.rate} = {Number(f.amount).toLocaleString()} Converted
             </div>
           )}
           <DialogFooter className="gap-2">

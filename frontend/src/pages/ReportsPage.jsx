@@ -145,6 +145,32 @@ const REPORTS = {
       { key: 'last_deal', label: 'Last Deal', w: 'w-[90px]' },
     ],
   },
+  'tms': {
+    title: 'TMS Report (SAP)',
+    desc: 'SAP mass upload format with all required TMS fields',
+    icon: FileText,
+    color: '#518dca',
+    roles: ['trader', 'treasury', 'admin'],
+    filters: ['dateRange'],
+    columns: [
+      { key: 'buy_or_trade', label: 'Buy/Trade', w: 'w-[70px]' },
+      { key: 'type_of_transfer', label: 'Transfer', w: 'w-[90px]' },
+      { key: 'from_co', label: 'From Co', w: 'w-[80px]' },
+      { key: 'from_bank', label: 'From Bank', w: 'w-[70px]' },
+      { key: 'to_co', label: 'To Co', w: 'w-[80px]' },
+      { key: 'to_bank', label: 'To Bank', w: 'w-[70px]' },
+      { key: 'buy_curr', label: 'Buy Curr', w: 'w-[55px]' },
+      { key: 'sell_curr', label: 'Sell Curr', w: 'w-[55px]' },
+      { key: 'buy_fx_amt', label: 'Buy Amt', numeric: true },
+      { key: 'sell_fx_amt', label: 'Sell Amt', numeric: true },
+      { key: 'ref_no', label: 'Ref#', w: 'w-[90px]' },
+      { key: 'fx_partner', label: 'FX Partner', w: 'w-[80px]' },
+      { key: 'rate', label: 'Rate', numeric: true, decimals: 4 },
+      { key: 'status', label: 'Status', w: 'w-[70px]' },
+      { key: 'maker', label: 'Maker', w: 'w-[80px]' },
+      { key: 'approver', label: 'Approver', w: 'w-[80px]' },
+    ],
+  },
 };
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -622,6 +648,7 @@ const REPORT_LABELS = {
   'user-activity': 'User Activity',
   'volume-summary': 'Volume Summary',
   'client-activity': 'Client Activity',
+  'tms': 'TMS Report (SAP)',
 };
 
 function PermissionsDialog({ open, onClose }) {

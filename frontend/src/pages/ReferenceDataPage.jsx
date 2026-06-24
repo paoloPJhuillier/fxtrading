@@ -16,6 +16,7 @@ import { toast } from 'sonner';
 const TABS = [
   { value: 'companies', label: 'Companies' },
   { value: 'banks', label: 'Banks' },
+  { value: 'counterparties', label: 'Counterparties' },
   { value: 'transaction-types', label: 'Transaction Types' },
   { value: 'transfer-types', label: 'Transfer Types' },
   { value: 'currencies', label: 'Currencies' },

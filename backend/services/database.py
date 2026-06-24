@@ -34,6 +34,7 @@ SCOPE_MAP = {
     "transaction_types":  ("reference", "transaction_types"),
     "transfer_types":     ("reference", "transfer_types"),
     "report_permissions": ("reference", "report_permissions"),
+    "counterparties":     ("reference", "counterparties"),
 }
 
 ALL_SCOPES = sorted({scope for scope, _ in SCOPE_MAP.values()})

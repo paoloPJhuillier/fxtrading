@@ -11,12 +11,13 @@ export function RefDataProvider({ children }) {
   const load = useCallback(async (signal) => {
     try {
       const opts = signal ? { signal } : {};
-      const [c, b, tx, tf, cur] = await Promise.all([
+      const [c, b, tx, tf, cur, cp] = await Promise.all([
         api.get('/reference/companies', opts),
         api.get('/reference/banks', opts),
         api.get('/reference/transaction-types', opts),
         api.get('/reference/transfer-types', opts),
         api.get('/reference/currencies', opts),
+        api.get('/reference/counterparties', opts),
       ]);
       setData({
         companies: c.data.filter(i => i.is_active),
@@ -24,8 +25,9 @@ export function RefDataProvider({ children }) {
         txTypes: tx.data.filter(i => i.is_active),
         tfTypes: tf.data.filter(i => i.is_active),
         currencies: cur.data.filter(i => i.is_active),
+        counterparties: cp.data.filter(i => i.is_active),
         _all: {
-          companies: c.data, banks: b.data, txTypes: tx.data, tfTypes: tf.data, currencies: cur.data,
+          companies: c.data, banks: b.data, txTypes: tx.data, tfTypes: tf.data, currencies: cur.data, counterparties: cp.data,
         }
       });
     } catch (e) { if (!signal?.aborted) console.error(e); }
