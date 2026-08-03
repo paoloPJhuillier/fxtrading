@@ -745,17 +745,9 @@ async def delete_bank_account(bank_id: str, account_id: str, user=Depends(get_cu
 
 
 # --- Bulk Import: Bank Accounts ---
-@api_router.post("/reference/banks/{bank_id}/accounts/import")
-async def import_bank_accounts(bank_id: str, file: UploadFile = File(...), user=Depends(get_current_user)):
-    """Import bank accounts from CSV or Excel. Expected columns: account_number, account_name."""
-    await require_role(user, ["admin"])
-    bank = await db.banks.find_one({"id": bank_id}, {"_id": 0})
-    if not bank:
-        raise HTTPException(status_code=404, detail="Bank not found")
-
-    data = await file.read()
+def _parse_file_rows(data: bytes, filename: str) -> list[dict]:
+    """Parse CSV or Excel file into list of dicts with lowercase/underscore keys."""
     rows = []
-    filename = file.filename.lower()
     try:
         if filename.endswith('.xlsx') or filename.endswith('.xls'):
             import openpyxl
@@ -773,13 +765,53 @@ async def import_bank_accounts(bank_id: str, file: UploadFile = File(...), user=
                 rows.append({k.strip().lower().replace(' ', '_'): v.strip() for k, v in row.items() if k})
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to parse file: {str(e)}")
+    return rows
+
+
+def _normalize_account_row(row: dict) -> dict:
+    """Detect fld_* legacy format and normalize to standard fields."""
+    if 'fld_accountno' in row:
+        return {
+            "account_number": row.get('fld_accountno', '').strip(),
+            "account_name": row.get('fld_branchaddress', '').strip(),
+            "bank_code": row.get('fld_bankcode', '').strip(),
+            "bank_no": row.get('fld_bankno', '').strip(),
+            "currency_code": row.get('fld_currencycode', '').strip(),
+            "account_type": row.get('fld_accounttype', '').strip(),
+            "bank_address": row.get('fld_bankaddress', '').strip(),
+            "contact_no": row.get('fld_contactno', '').strip(),
+            "account_alias": row.get('fld_accountalias', '').strip(),
+        }
+    return {
+        "account_number": row.get('account_number', row.get('account_no', '')).strip(),
+        "account_name": row.get('account_name', row.get('branch_address', '')).strip(),
+        "bank_code": row.get('bank_code', '').strip(),
+        "bank_no": row.get('bank_no', '').strip(),
+        "currency_code": row.get('currency_code', row.get('currency', '')).strip(),
+        "account_type": row.get('account_type', '').strip(),
+        "bank_address": row.get('bank_address', '').strip(),
+        "contact_no": row.get('contact_no', '').strip(),
+        "account_alias": row.get('account_alias', '').strip(),
+    }
+
+
+@api_router.post("/reference/banks/{bank_id}/accounts/import")
+async def import_bank_accounts(bank_id: str, file: UploadFile = File(...), user=Depends(get_current_user)):
+    """Import bank accounts from CSV or Excel. Supports both simple (account_number, account_name) and legacy fld_* formats."""
+    await require_role(user, ["admin"])
+    bank = await db.banks.find_one({"id": bank_id}, {"_id": 0})
+    if not bank:
+        raise HTTPException(status_code=404, detail="Bank not found")
+
+    rows = _parse_file_rows(await file.read(), file.filename.lower())
 
     created = 0
     skipped = 0
     errors_list = []
-    for i, row in enumerate(rows, start=2):
-        acct_num = row.get('account_number', '').strip()
-        acct_name = row.get('account_name', '').strip()
+    for i, raw in enumerate(rows, start=2):
+        row = _normalize_account_row(raw)
+        acct_num = row["account_number"]
+        acct_name = row["account_name"]
         if not acct_num or not acct_name:
             errors_list.append(f"Row {i}: missing account_number or account_name")
             skipped += 1
@@ -793,10 +825,79 @@ async def import_bank_accounts(bank_id: str, file: UploadFile = File(...), user=
             "account_number": acct_num, "account_name": acct_name,
             "is_active": True, "created_at": datetime.now(timezone.utc).isoformat()
         }
+        for extra in ("currency_code", "account_type", "bank_address", "contact_no", "account_alias"):
+            if row.get(extra) and row[extra] not in ("NULL", "N/A", "None", ""):
+                account[extra] = row[extra]
         await db.bank_accounts.insert_one(account)
         created += 1
     await log_audit("bank_accounts_imported", user, "bank_account", bank_id, bank["name"], f"Imported {created} accounts to {bank['name']}")
     return {"created": created, "skipped": skipped, "errors": errors_list[:20]}
+
+
+# --- Global Bank Accounts Import (multi-bank, matches by bank code/name) ---
+@api_router.post("/reference/bank-accounts/import")
+async def import_bank_accounts_global(file: UploadFile = File(...), user=Depends(get_current_user)):
+    """Import bank accounts across multiple banks. Matches fld_BankCode to existing bank codes/names. Creates banks if not found."""
+    await require_role(user, ["admin"])
+
+    rows = _parse_file_rows(await file.read(), file.filename.lower())
+
+    all_banks = await db.banks.find({}, {"_id": 0}).to_list(500)
+    bank_lookup = {}
+    for b in all_banks:
+        bank_lookup[b.get("code", "").upper()] = b
+        bank_lookup[b["name"].upper()] = b
+
+    created = 0
+    skipped = 0
+    banks_created = 0
+    errors_list = []
+    for i, raw in enumerate(rows, start=2):
+        row = _normalize_account_row(raw)
+        acct_num = row["account_number"]
+        acct_name = row["account_name"]
+        bank_code = row.get("bank_code", "").upper()
+
+        if not acct_num or not acct_name:
+            errors_list.append(f"Row {i}: missing account_number or account_name")
+            skipped += 1
+            continue
+        if not bank_code:
+            errors_list.append(f"Row {i}: missing bank_code")
+            skipped += 1
+            continue
+
+        bank = bank_lookup.get(bank_code)
+        if not bank:
+            new_bank = {
+                "id": str(uuid.uuid4()), "name": bank_code, "code": bank_code,
+                "swift_code": "", "is_active": True,
+                "created_at": datetime.now(timezone.utc).isoformat()
+            }
+            await db.banks.insert_one(new_bank)
+            new_bank.pop("_id", None)
+            bank_lookup[bank_code] = new_bank
+            bank = new_bank
+            banks_created += 1
+
+        existing = await db.bank_accounts.find_one({"bank_id": bank["id"], "account_number": acct_num})
+        if existing:
+            skipped += 1
+            continue
+
+        account = {
+            "id": str(uuid.uuid4()), "bank_id": bank["id"],
+            "account_number": acct_num, "account_name": acct_name,
+            "is_active": True, "created_at": datetime.now(timezone.utc).isoformat()
+        }
+        for extra in ("currency_code", "account_type", "bank_address", "contact_no", "account_alias"):
+            if row.get(extra) and row[extra] not in ("NULL", "N/A", "None", ""):
+                account[extra] = row[extra]
+        await db.bank_accounts.insert_one(account)
+        created += 1
+
+    await log_audit("bank_accounts_imported", user, "bank_account", "", "", f"Global import: {created} accounts, {banks_created} new banks, {skipped} skipped")
+    return {"created": created, "skipped": skipped, "banks_created": banks_created, "errors": errors_list[:20]}
 
 
 # --- Bulk Import: FX Clients (Companies) ---
@@ -805,26 +906,7 @@ async def import_companies(file: UploadFile = File(...), user=Depends(get_curren
     """Import companies/FX Clients from CSV or Excel. Expected columns: name, code, and optionally type (Customer/Vendor)."""
     await require_role(user, ["admin"])
 
-    data = await file.read()
-    rows = []
-    filename = file.filename.lower()
-    try:
-        if filename.endswith('.xlsx') or filename.endswith('.xls'):
-            import openpyxl
-            wb = openpyxl.load_workbook(io.BytesIO(data), read_only=True)
-            ws = wb.active
-            headers = [str(c.value or '').strip().lower().replace(' ', '_') for c in next(ws.iter_rows(max_row=1))]
-            for row in ws.iter_rows(min_row=2, values_only=True):
-                d = {headers[i]: str(row[i] or '').strip() for i in range(min(len(headers), len(row)))}
-                rows.append(d)
-            wb.close()
-        else:
-            text = data.decode('utf-8-sig')
-            reader = csv.DictReader(io.StringIO(text))
-            for row in reader:
-                rows.append({k.strip().lower().replace(' ', '_'): v.strip() for k, v in row.items() if k})
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Failed to parse file: {str(e)}")
+    rows = _parse_file_rows(await file.read(), file.filename.lower())
 
     created = 0
     skipped = 0

@@ -12,51 +12,35 @@
 - **Database**: Switchable (DB_TYPE): MongoDB 7.0.31 | Couchbase Enterprise SDK 4.6.0
 - **Storage**: Switchable (STORAGE_TYPE): Emergent Object Storage | S3-compatible (boto3 1.42.58)
 
-## Roles
-- **Trader**: Create deals, upload client proofs, view own deals, reports
-- **Treasury**: Process deals (confirm/return), upload processor proofs, reports
-- **Admin**: Manage users, reference data (incl. counterparties), audit trail, report permissions, CSV/Excel import
-- **System Admin (sysadmin)**: Everything admin can do + DB reset, DB export, DB stats
+## What's Been Implemented
 
-## What's Been Implemented (Summary)
-- Core Platform, Performance Optimizations, Bank Account Management, Deal History, Split Settlement Proofs, Returned Deal Edit Page
-- Switchable Storage (Emergent <-> S3/Huawei OBS) and Database (MongoDB <-> Couchbase Enterprise)
-- 8 Reports with server-side pagination, debounced filters, autocomplete comboboxes
-- Admin-configurable report permissions, YTD default dates
-- System Administration (sysadmin role, DB reset, DB export, DB stats)
-- FX Assessment 9 Revisions (Items 1-9 from Apr assessment)
+### Core Platform
+- Multi-role auth (Trader, Treasury, Admin, Sysadmin)
+- Deal lifecycle: create → pending → confirm/return/cancel
+- Settlement proof upload (client + processor)
+- Returned deal edit & resubmit
+- Switchable Storage (Emergent ↔ S3/Huawei OBS) and Database (MongoDB ↔ Couchbase)
+- 8 Reports with server-side pagination, autocomplete filters, CSV/PDF export
+- Admin report permissions, System Admin page (DB stats/export/reset)
+- FX Assessment 9 Revisions
 
-### User Feedback 10 Items (Complete - Jun 24, 2026)
-All 10 items from FX_Trading_Tracker_User_Feedback.xlsx implemented and tested:
+### User Feedback 10 Items (Jun 24, 2026)
+- Buy/Sell transaction types, Counterparty entity, FX-Intercompany, TMS Report, Simplified currency
 
-0. **Transaction Type -> Buy/Sell**: Replaced Today/Tomorrow/Spot with Buy and Sell
-1. **Counterparty Reference Entity**: New collection with CRUD in admin UI (Counterparties tab). Seeded: CLSC, PJ, Verite
-2. **Source (From) -> Counterparty**: For FX Local and FX-Intercompany, Company replaced with Counterparty dropdown
-3. **Ours Counterparty Display**: Shows "Counterparty: {name}" in Ours section when applicable
-4. **FX-Intercompany Transfer Type**: New transfer type seeded. Both Source and Destination show Counterparty
-5. **Dynamic Ours Label**: Renamed to "Selling Counterparty Ours (Receiving Account)" for FX-Intercompany
-6. **Buying Counterparty Ours**: New section with Bank/Account for FX-Intercompany deals
-7. **Settlement Dual Lines**: FX-Intercompany deals show .1 (Sell) and .2 (Buy) reference suffixes
-8. **TMS Report (SAP)**: 21-column SAP mass upload format. Intercompany dual lines. CSV/JSON/PDF export
-9. **Simplified Currency**: Single dropdown (removed Sell Currency). Formula = Amount x Rate only
+### 12-Item Feedback Fixes (Aug 3, 2026)
+1. FX Client tab label, 2. Add FX Client dialog, 3. USDC→USD Circle
+4. Treasury Last Action column, 5-6. currency_amount display
+7. Account Name required, 8. Searchable bank account selector
+9. Bank account CSV/Excel import, 10. FX Client CSV/Excel import
+11. FX - Corporate Settlement transfer type, 12. Crypto networks (SOLANA/ETHEREUM/TRON)
 
-### 12-Item Feedback Fixes (Complete - Aug 3, 2026)
-All 12 approved feedback items implemented and tested:
-
-1. **FX Client tab label**: Renamed "Companies" -> "FX Client" in Reference Data tabs
-2. **Add dialog label**: Dialog shows "Add FX Client" for companies tab
-3. **USDC name**: Changed from "USD Coin" to "USD Circle" (seed + backfill on startup)
-4. **Treasury Last Action column**: Added Last Action with history badge in Treasury queue table
-5. **Treasury Amount -> currency_amount**: Amount column shows original principal (currency_amount) with currency label
-6. **My Deals Amount -> currency_amount**: Same as #5 for My Deals table
-7. **Account Name required**: Bank account creation now requires account_name (backend + frontend validation)
-8. **Searchable bank account selector**: Combobox shows account name + account number, searchable by both
-9. **Bank account CSV/Excel import**: POST /api/reference/banks/{id}/accounts/import endpoint + UI button in accounts dialog
-10. **FX Client CSV/Excel import**: POST /api/reference/companies/import endpoint + UI button on FX Client tab
-11. **FX - Corporate Settlement**: New transfer type seeded, behaves like FX Local (shows counterparty)
-12. **Crypto networks**: Network dropdown (SOLANA/ETHEREUM/TRON) appears when type is crypto. Persisted as from_network/to_network/ours_network/buying_ours_network
-
-Tested: 9/9 backend + 14/14 frontend (100%)
+### Bank Account Import Enhancement (Aug 3, 2026)
+- **Legacy fld_* format support**: Auto-detects `fld_AccountNo`, `fld_BranchAddress`, `fld_BankCode`, `fld_CurrencyCode`, `fld_AccountType`, etc.
+- **Global multi-bank import**: POST /api/reference/bank-accounts/import — matches `fld_BankCode` to existing banks, auto-creates new banks if not found
+- **Rich account fields**: Persists `currency_code`, `account_type`, `bank_address`, `contact_no`, `account_alias` when available
+- **UI**: "Import Accounts CSV" button on Banks tab for global import; "Import" button in per-bank dialog
+- **Accounts table**: Now shows Currency and Type columns
+- Tested: 1,689 accounts imported across 31 auto-created banks from production CSV (1,985 rows)
 
 ---
 
@@ -65,5 +49,5 @@ Tested: 9/9 backend + 14/14 frontend (100%)
 - **P2**: TMS pagination fix for intercompany row expansion
 - **P2**: Email notifications for deal status changes
 - **P2**: Scheduled report delivery (daily/weekly)
-- **P2**: Reports aggregation scalability (native DB pipelines instead of to_list)
-- **P2**: Approval workflow for TMS (user mentioned "might need a workflow for approval")
+- **P2**: Reports aggregation scalability (native DB pipelines)
+- **P2**: Approval workflow for TMS

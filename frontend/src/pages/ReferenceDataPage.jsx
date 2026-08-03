@@ -41,6 +41,7 @@ export default function ReferenceDataPage() {
   // Import state
   const importFileRef = useRef(null);
   const acctImportFileRef = useRef(null);
+  const globalAcctImportRef = useRef(null);
   const [importing, setImporting] = useState(false);
 
   const hasLoaded = useRef(false);
@@ -166,6 +167,22 @@ export default function ReferenceDataPage() {
     finally { setImporting(false); e.target.value = ''; }
   };
 
+  const handleGlobalAccountsImport = async (e) => {
+    if (!e.target.files?.length) return;
+    setImporting(true);
+    try {
+      const fd = new FormData();
+      fd.append('file', e.target.files[0]);
+      const r = await api.post('/reference/bank-accounts/import', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+      let msg = `Imported ${r.data.created} account(s), ${r.data.skipped} skipped`;
+      if (r.data.banks_created > 0) msg += `, ${r.data.banks_created} new bank(s) created`;
+      toast.success(msg);
+      if (r.data.errors?.length > 0) toast.warning(`Errors: ${r.data.errors.slice(0, 3).join('; ')}`);
+      load(); reloadRefData();
+    } catch (err) { toast.error(err.response?.data?.detail || 'Import failed'); }
+    finally { setImporting(false); e.target.value = ''; }
+  };
+
   return (
     <div data-testid="reference-data-page">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
@@ -179,6 +196,14 @@ export default function ReferenceDataPage() {
               <input type="file" ref={importFileRef} className="hidden" accept=".csv,.xlsx,.xls" onChange={handleImportCompanies} data-testid="import-companies-input" />
               <Button variant="outline" onClick={() => importFileRef.current?.click()} disabled={importing} data-testid="import-companies-btn">
                 <Upload className="h-4 w-4 mr-2" /> {importing ? 'Importing...' : 'Import CSV/Excel'}
+              </Button>
+            </>
+          )}
+          {tab === 'banks' && (
+            <>
+              <input type="file" ref={globalAcctImportRef} className="hidden" accept=".csv,.xlsx,.xls" onChange={handleGlobalAccountsImport} data-testid="import-global-accounts-input" />
+              <Button variant="outline" onClick={() => globalAcctImportRef.current?.click()} disabled={importing} data-testid="import-global-accounts-btn">
+                <Upload className="h-4 w-4 mr-2" /> {importing ? 'Importing...' : 'Import Accounts CSV'}
               </Button>
             </>
           )}
@@ -280,7 +305,7 @@ export default function ReferenceDataPage() {
       {/* Bank Accounts Management Dialog */}
       {acctDialogOpen && (
       <Dialog open={acctDialogOpen} onOpenChange={o => { if (!o) { setAcctDialogOpen(false); setAcctBank(null); } }}>
-        <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto" data-testid="bank-accounts-dialog">
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto" data-testid="bank-accounts-dialog">
           <DialogHeader>
             <div className="flex items-center justify-between">
               <DialogTitle style={{ fontFamily: 'Chivo' }}>Manage Accounts — {acctBank?.name}</DialogTitle>
@@ -319,6 +344,8 @@ export default function ReferenceDataPage() {
                   <TableRow className="bg-slate-50">
                     <TableHead>Account Number</TableHead>
                     <TableHead>Account Name</TableHead>
+                    <TableHead>Currency</TableHead>
+                    <TableHead>Type</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
@@ -327,7 +354,9 @@ export default function ReferenceDataPage() {
                   {bankAccounts.map(acct => (
                     <TableRow key={acct.id} data-testid={`acct-row-${acct.id}`}>
                       <TableCell className="font-mono text-xs font-medium">{acct.account_number}</TableCell>
-                      <TableCell className="text-xs">{acct.account_name || '-'}</TableCell>
+                      <TableCell className="text-xs max-w-[200px] truncate" title={acct.account_name || '-'}>{acct.account_name || '-'}</TableCell>
+                      <TableCell className="text-xs font-mono">{acct.currency_code || '-'}</TableCell>
+                      <TableCell className="text-xs">{acct.account_type && acct.account_type !== 'None' ? acct.account_type : '-'}</TableCell>
                       <TableCell><Badge className={acct.is_active !== false ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}>{acct.is_active !== false ? 'Active' : 'Inactive'}</Badge></TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-1">
