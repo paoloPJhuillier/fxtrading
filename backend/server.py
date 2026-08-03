@@ -727,6 +727,8 @@ async def create_bank_account(bank_id: str, req: BankAccountCreate, user=Depends
 async def update_bank_account(bank_id: str, account_id: str, req: BankAccountUpdate, user=Depends(get_current_user)):
     await require_role(user, ["admin"])
     update_data = {k: v for k, v in req.model_dump().items() if v is not None}
+    if "account_name" in update_data and not update_data["account_name"].strip():
+        raise HTTPException(status_code=400, detail="Account name cannot be empty")
     if not update_data:
         raise HTTPException(status_code=400, detail="No fields to update")
     await db.bank_accounts.update_one({"id": account_id, "bank_id": bank_id}, {"$set": update_data})

@@ -15,12 +15,12 @@
 ## Roles
 - **Trader**: Create deals, upload client proofs, view own deals, reports
 - **Treasury**: Process deals (confirm/return), upload processor proofs, reports
-- **Admin**: Manage users, reference data (incl. counterparties), audit trail, report permissions
+- **Admin**: Manage users, reference data (incl. counterparties), audit trail, report permissions, CSV/Excel import
 - **System Admin (sysadmin)**: Everything admin can do + DB reset, DB export, DB stats
 
 ## What's Been Implemented (Summary)
 - Core Platform, Performance Optimizations, Bank Account Management, Deal History, Split Settlement Proofs, Returned Deal Edit Page
-- Switchable Storage (Emergent ↔ S3/Huawei OBS) and Database (MongoDB ↔ Couchbase Enterprise)
+- Switchable Storage (Emergent <-> S3/Huawei OBS) and Database (MongoDB <-> Couchbase Enterprise)
 - 8 Reports with server-side pagination, debounced filters, autocomplete comboboxes
 - Admin-configurable report permissions, YTD default dates
 - System Administration (sysadmin role, DB reset, DB export, DB stats)
@@ -29,18 +29,34 @@
 ### User Feedback 10 Items (Complete - Jun 24, 2026)
 All 10 items from FX_Trading_Tracker_User_Feedback.xlsx implemented and tested:
 
-0. **Transaction Type → Buy/Sell**: Replaced Today/Tomorrow/Spot with Buy and Sell
+0. **Transaction Type -> Buy/Sell**: Replaced Today/Tomorrow/Spot with Buy and Sell
 1. **Counterparty Reference Entity**: New collection with CRUD in admin UI (Counterparties tab). Seeded: CLSC, PJ, Verite
-2. **Source (From) → Counterparty**: For FX Local and FX-Intercompany, Company replaced with Counterparty dropdown
+2. **Source (From) -> Counterparty**: For FX Local and FX-Intercompany, Company replaced with Counterparty dropdown
 3. **Ours Counterparty Display**: Shows "Counterparty: {name}" in Ours section when applicable
 4. **FX-Intercompany Transfer Type**: New transfer type seeded. Both Source and Destination show Counterparty
 5. **Dynamic Ours Label**: Renamed to "Selling Counterparty Ours (Receiving Account)" for FX-Intercompany
-6. **Buying Counterparty Ours**: New section with Bank/Account for FX-Intercompany deals. Backend model includes buying_ours_type/bank/account_num/wallet_address
+6. **Buying Counterparty Ours**: New section with Bank/Account for FX-Intercompany deals
 7. **Settlement Dual Lines**: FX-Intercompany deals show .1 (Sell) and .2 (Buy) reference suffixes
 8. **TMS Report (SAP)**: 21-column SAP mass upload format. Intercompany dual lines. CSV/JSON/PDF export
-9. **Simplified Currency**: Single dropdown (removed Sell Currency). Formula = Amount × Rate only (removed divide logic)
+9. **Simplified Currency**: Single dropdown (removed Sell Currency). Formula = Amount x Rate only
 
-Tested: 11/11 backend + 12/12 frontend (100%)
+### 12-Item Feedback Fixes (Complete - Aug 3, 2026)
+All 12 approved feedback items implemented and tested:
+
+1. **FX Client tab label**: Renamed "Companies" -> "FX Client" in Reference Data tabs
+2. **Add dialog label**: Dialog shows "Add FX Client" for companies tab
+3. **USDC name**: Changed from "USD Coin" to "USD Circle" (seed + backfill on startup)
+4. **Treasury Last Action column**: Added Last Action with history badge in Treasury queue table
+5. **Treasury Amount -> currency_amount**: Amount column shows original principal (currency_amount) with currency label
+6. **My Deals Amount -> currency_amount**: Same as #5 for My Deals table
+7. **Account Name required**: Bank account creation now requires account_name (backend + frontend validation)
+8. **Searchable bank account selector**: Combobox shows account name + account number, searchable by both
+9. **Bank account CSV/Excel import**: POST /api/reference/banks/{id}/accounts/import endpoint + UI button in accounts dialog
+10. **FX Client CSV/Excel import**: POST /api/reference/companies/import endpoint + UI button on FX Client tab
+11. **FX - Corporate Settlement**: New transfer type seeded, behaves like FX Local (shows counterparty)
+12. **Crypto networks**: Network dropdown (SOLANA/ETHEREUM/TRON) appears when type is crypto. Persisted as from_network/to_network/ours_network/buying_ours_network
+
+Tested: 9/9 backend + 14/14 frontend (100%)
 
 ---
 
@@ -48,4 +64,6 @@ Tested: 11/11 backend + 12/12 frontend (100%)
 - **P1**: Backend refactoring — split server.py into /routes, /models, /services
 - **P2**: TMS pagination fix for intercompany row expansion
 - **P2**: Email notifications for deal status changes
-- **P2**: Scheduled report delivery
+- **P2**: Scheduled report delivery (daily/weekly)
+- **P2**: Reports aggregation scalability (native DB pipelines instead of to_list)
+- **P2**: Approval workflow for TMS (user mentioned "might need a workflow for approval")
