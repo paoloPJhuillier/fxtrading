@@ -78,20 +78,24 @@ class DealCreate(BaseModel):
     from_bank: Optional[str] = ""
     from_account_num: Optional[str] = ""
     from_wallet_address: Optional[str] = ""
+    from_network: Optional[str] = ""
     to_type: Optional[str] = "bank"
     to_company: Optional[str] = ""
     to_bank: Optional[str] = ""
     to_account_num: Optional[str] = ""
     to_wallet_address: Optional[str] = ""
+    to_network: Optional[str] = ""
     ours_type: str  # "bank" or "crypto"
     ours_bank: Optional[str] = ""
     ours_account_num: Optional[str] = ""
     ours_wallet_address: Optional[str] = ""
+    ours_network: Optional[str] = ""
     # Buying counterparty ours (FX-Intercompany only)
     buying_ours_type: Optional[str] = "bank"
     buying_ours_bank: Optional[str] = ""
     buying_ours_account_num: Optional[str] = ""
     buying_ours_wallet_address: Optional[str] = ""
+    buying_ours_network: Optional[str] = ""
     buy_currency: str
     sell_currency: Optional[str] = ""
     currency_amount: float
@@ -123,7 +127,7 @@ class ReferenceItemUpdate(BaseModel):
 
 class BankAccountCreate(BaseModel):
     account_number: str
-    account_name: Optional[str] = ""
+    account_name: str
 
 class BankAccountUpdate(BaseModel):
     account_number: Optional[str] = None
@@ -141,15 +145,23 @@ class DealEdit(BaseModel):
     from_bank: Optional[str] = None
     from_account_num: Optional[str] = None
     from_wallet_address: Optional[str] = None
+    from_network: Optional[str] = None
     to_type: Optional[str] = None
     to_company: Optional[str] = None
     to_bank: Optional[str] = None
     to_account_num: Optional[str] = None
     to_wallet_address: Optional[str] = None
+    to_network: Optional[str] = None
     ours_type: Optional[str] = None
     ours_bank: Optional[str] = None
     ours_account_num: Optional[str] = None
     ours_wallet_address: Optional[str] = None
+    ours_network: Optional[str] = None
+    buying_ours_type: Optional[str] = None
+    buying_ours_bank: Optional[str] = None
+    buying_ours_account_num: Optional[str] = None
+    buying_ours_wallet_address: Optional[str] = None
+    buying_ours_network: Optional[str] = None
     buy_currency: Optional[str] = None
     sell_currency: Optional[str] = None
     currency_amount: Optional[float] = None
@@ -424,7 +436,7 @@ async def list_deals(
         query.setdefault("deal_date", {})["$lte"] = date_to
     total = await db.deals.count_documents(query)
     skip = (page - 1) * limit
-    list_projection = {"_id": 0, "id": 1, "reference_number": 1, "client_name": 1, "counterparty": 1, "transaction_type": 1, "transfer_type": 1, "buy_currency": 1, "sell_currency": 1, "currency_amount": 1, "amount": 1, "rate": 1, "deal_date": 1, "value_date": 1, "status": 1, "created_at": 1, "created_by_name": 1, "from_type": 1, "from_company": 1, "from_bank": 1, "from_account_num": 1, "from_wallet_address": 1, "to_type": 1, "to_company": 1, "to_bank": 1, "to_account_num": 1, "to_wallet_address": 1, "ours_type": 1, "ours_bank": 1, "ours_account_num": 1, "ours_wallet_address": 1, "buying_ours_type": 1, "buying_ours_bank": 1, "buying_ours_account_num": 1, "buying_ours_wallet_address": 1, "remarks": 1, "treasury_remarks": 1, "cancellation_reason": 1, "processed_by_name": 1, "processed_at": 1, "settlement_proofs": 1, "history": 1}
+    list_projection = {"_id": 0, "id": 1, "reference_number": 1, "client_name": 1, "counterparty": 1, "transaction_type": 1, "transfer_type": 1, "buy_currency": 1, "sell_currency": 1, "currency_amount": 1, "amount": 1, "rate": 1, "deal_date": 1, "value_date": 1, "status": 1, "created_at": 1, "created_by_name": 1, "from_type": 1, "from_company": 1, "from_bank": 1, "from_account_num": 1, "from_wallet_address": 1, "from_network": 1, "to_type": 1, "to_company": 1, "to_bank": 1, "to_account_num": 1, "to_wallet_address": 1, "to_network": 1, "ours_type": 1, "ours_bank": 1, "ours_account_num": 1, "ours_wallet_address": 1, "ours_network": 1, "buying_ours_type": 1, "buying_ours_bank": 1, "buying_ours_account_num": 1, "buying_ours_wallet_address": 1, "buying_ours_network": 1, "remarks": 1, "treasury_remarks": 1, "cancellation_reason": 1, "processed_by_name": 1, "processed_at": 1, "settlement_proofs": 1, "history": 1}
     deals = await db.deals.find(query, list_projection).sort("created_at", -1).skip(skip).limit(limit).to_list(limit)
     # Truncate history to last 3 entries for list performance
     for d in deals:
@@ -696,11 +708,13 @@ async def create_bank_account(bank_id: str, req: BankAccountCreate, user=Depends
     bank = await db.banks.find_one({"id": bank_id}, {"_id": 0})
     if not bank:
         raise HTTPException(status_code=404, detail="Bank not found")
+    if not req.account_name.strip():
+        raise HTTPException(status_code=400, detail="Account name is required")
     account = {
         "id": str(uuid.uuid4()),
         "bank_id": bank_id,
         "account_number": req.account_number,
-        "account_name": req.account_name or "",
+        "account_name": req.account_name,
         "is_active": True,
         "created_at": datetime.now(timezone.utc).isoformat()
     }
@@ -726,6 +740,115 @@ async def delete_bank_account(bank_id: str, account_id: str, user=Depends(get_cu
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Account not found")
     return {"message": "Account deleted"}
+
+
+# --- Bulk Import: Bank Accounts ---
+@api_router.post("/reference/banks/{bank_id}/accounts/import")
+async def import_bank_accounts(bank_id: str, file: UploadFile = File(...), user=Depends(get_current_user)):
+    """Import bank accounts from CSV or Excel. Expected columns: account_number, account_name."""
+    await require_role(user, ["admin"])
+    bank = await db.banks.find_one({"id": bank_id}, {"_id": 0})
+    if not bank:
+        raise HTTPException(status_code=404, detail="Bank not found")
+
+    data = await file.read()
+    rows = []
+    filename = file.filename.lower()
+    try:
+        if filename.endswith('.xlsx') or filename.endswith('.xls'):
+            import openpyxl
+            wb = openpyxl.load_workbook(io.BytesIO(data), read_only=True)
+            ws = wb.active
+            headers = [str(c.value or '').strip().lower().replace(' ', '_') for c in next(ws.iter_rows(max_row=1))]
+            for row in ws.iter_rows(min_row=2, values_only=True):
+                d = {headers[i]: str(row[i] or '').strip() for i in range(min(len(headers), len(row)))}
+                rows.append(d)
+            wb.close()
+        else:
+            text = data.decode('utf-8-sig')
+            reader = csv.DictReader(io.StringIO(text))
+            for row in reader:
+                rows.append({k.strip().lower().replace(' ', '_'): v.strip() for k, v in row.items() if k})
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to parse file: {str(e)}")
+
+    created = 0
+    skipped = 0
+    errors_list = []
+    for i, row in enumerate(rows, start=2):
+        acct_num = row.get('account_number', '').strip()
+        acct_name = row.get('account_name', '').strip()
+        if not acct_num or not acct_name:
+            errors_list.append(f"Row {i}: missing account_number or account_name")
+            skipped += 1
+            continue
+        existing = await db.bank_accounts.find_one({"bank_id": bank_id, "account_number": acct_num})
+        if existing:
+            skipped += 1
+            continue
+        account = {
+            "id": str(uuid.uuid4()), "bank_id": bank_id,
+            "account_number": acct_num, "account_name": acct_name,
+            "is_active": True, "created_at": datetime.now(timezone.utc).isoformat()
+        }
+        await db.bank_accounts.insert_one(account)
+        created += 1
+    await log_audit("bank_accounts_imported", user, "bank_account", bank_id, bank["name"], f"Imported {created} accounts to {bank['name']}")
+    return {"created": created, "skipped": skipped, "errors": errors_list[:20]}
+
+
+# --- Bulk Import: FX Clients (Companies) ---
+@api_router.post("/reference/companies/import")
+async def import_companies(file: UploadFile = File(...), user=Depends(get_current_user)):
+    """Import companies/FX Clients from CSV or Excel. Expected columns: name, code, and optionally type (Customer/Vendor)."""
+    await require_role(user, ["admin"])
+
+    data = await file.read()
+    rows = []
+    filename = file.filename.lower()
+    try:
+        if filename.endswith('.xlsx') or filename.endswith('.xls'):
+            import openpyxl
+            wb = openpyxl.load_workbook(io.BytesIO(data), read_only=True)
+            ws = wb.active
+            headers = [str(c.value or '').strip().lower().replace(' ', '_') for c in next(ws.iter_rows(max_row=1))]
+            for row in ws.iter_rows(min_row=2, values_only=True):
+                d = {headers[i]: str(row[i] or '').strip() for i in range(min(len(headers), len(row)))}
+                rows.append(d)
+            wb.close()
+        else:
+            text = data.decode('utf-8-sig')
+            reader = csv.DictReader(io.StringIO(text))
+            for row in reader:
+                rows.append({k.strip().lower().replace(' ', '_'): v.strip() for k, v in row.items() if k})
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to parse file: {str(e)}")
+
+    created = 0
+    skipped = 0
+    errors_list = []
+    for i, row in enumerate(rows, start=2):
+        name = row.get('name', '').strip()
+        code = row.get('code', '').strip()
+        if not name or not code:
+            errors_list.append(f"Row {i}: missing name or code")
+            skipped += 1
+            continue
+        existing = await db.companies.find_one({"code": code})
+        if existing:
+            skipped += 1
+            continue
+        company = {
+            "id": str(uuid.uuid4()), "name": name, "code": code,
+            "is_active": True, "created_at": datetime.now(timezone.utc).isoformat()
+        }
+        ctype = row.get('type', '').strip()
+        if ctype:
+            company["client_type"] = ctype
+        await db.companies.insert_one(company)
+        created += 1
+    await log_audit("companies_imported", user, "company", "", "", f"Imported {created} companies/FX clients")
+    return {"created": created, "skipped": skipped, "errors": errors_list[:20]}
 
 
 # --- Audit Logs ---
@@ -892,7 +1015,7 @@ async def seed_data():
             ("RUB", "Russian Ruble", "RUB")
         ]
         stablecoin = [
-            ("USDT", "Tether", "USDT"), ("USDC", "USD Coin", "USDC"),
+            ("USDT", "Tether", "USDT"), ("USDC", "USD Circle", "USDC"),
             ("DAI", "Dai", "DAI"), ("BUSD", "Binance USD", "BUSD"),
             ("TUSD", "TrueUSD", "TUSD"), ("FRAX", "Frax", "FRAX"),
             ("LUSD", "Liquity USD", "LUSD"), ("GUSD", "Gemini Dollar", "GUSD"),
@@ -935,10 +1058,15 @@ async def seed_data():
     existing_interco = await db.transfer_types.find_one({"name": "FX-Intercompany"})
     if not existing_interco:
         await db.transfer_types.delete_many({})
-        types = [("FX Crypto Conversion", "FX_CRYPTO"), ("FX Local", "FX_LOCAL"), ("PDAX Withdrawal", "PDAX_WD"), ("FX Bank Deal", "FX_BANK"), ("FX-Intercompany", "FX_INTERCO")]
+        types = [("FX Crypto Conversion", "FX_CRYPTO"), ("FX Local", "FX_LOCAL"), ("PDAX Withdrawal", "PDAX_WD"), ("FX Bank Deal", "FX_BANK"), ("FX-Intercompany", "FX_INTERCO"), ("FX - Corporate Settlement", "FX_CORP_SETTLE")]
         docs = [{"id": str(uuid.uuid4()), "name": n, "code": c, "is_active": True, "created_at": datetime.now(timezone.utc).isoformat()} for n, c in types]
         await db.transfer_types.insert_many(docs)
-        logger.info("Reseeded transfer types (with FX-Intercompany)")
+        logger.info("Reseeded transfer types (with FX-Intercompany, FX - Corporate Settlement)")
+    else:
+        # Ensure FX - Corporate Settlement exists
+        if not await db.transfer_types.find_one({"name": "FX - Corporate Settlement"}):
+            await db.transfer_types.insert_one({"id": str(uuid.uuid4()), "name": "FX - Corporate Settlement", "code": "FX_CORP_SETTLE", "is_active": True, "created_at": datetime.now(timezone.utc).isoformat()})
+            logger.info("Added FX - Corporate Settlement transfer type")
 
     # Counterparties
     if await db.counterparties.count_documents({}) == 0:
@@ -960,6 +1088,9 @@ async def seed_data():
         await db.banks.insert_many(docs)
 
     logger.info("Seed data complete")
+
+    # Backfill: Update USDC name from "USD Coin" to "USD Circle" if needed
+    await db.currencies.update_many({"code": "USDC", "name": "USD Coin"}, {"$set": {"name": "USD Circle"}})
 
 
 @app.on_event("startup")

@@ -12,7 +12,7 @@ import { Separator } from '@/components/ui/separator';
 import { ArrowLeft, AlertTriangle } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
-import { VField, TypeToggle, DatePick, SearchSelect, CurrSel, BankAccountSelect, ProofUploadSection } from '@/components/DealFormFields';
+import { VField, TypeToggle, DatePick, SearchSelect, CurrSel, BankAccountSelect, ProofUploadSection, NetworkSelect } from '@/components/DealFormFields';
 
 export default function NewDealPage() {
   const navigate = useNavigate();
@@ -35,16 +35,16 @@ export default function NewDealPage() {
   const [f, setF] = useState({
     transaction_type: '', transfer_type: '', client_name: '', counterparty: '',
     deal_date: new Date(), value_date: new Date(),
-    from_type: 'bank', from_company: '', from_bank: '', from_account_num: '', from_wallet_address: '',
-    to_type: 'bank', to_company: '', to_bank: '', to_account_num: '', to_wallet_address: '',
-    ours_type: 'bank', ours_bank: '', ours_account_num: '', ours_wallet_address: '',
-    buying_ours_type: 'bank', buying_ours_bank: '', buying_ours_account_num: '', buying_ours_wallet_address: '',
+    from_type: 'bank', from_company: '', from_bank: '', from_account_num: '', from_wallet_address: '', from_network: '',
+    to_type: 'bank', to_company: '', to_bank: '', to_account_num: '', to_wallet_address: '', to_network: '',
+    ours_type: 'bank', ours_bank: '', ours_account_num: '', ours_wallet_address: '', ours_network: '',
+    buying_ours_type: 'bank', buying_ours_bank: '', buying_ours_account_num: '', buying_ours_wallet_address: '', buying_ours_network: '',
     buy_currency: '', sell_currency: '',
     currency_amount: '', amount: '', rate: '', remarks: ''
   });
 
   const isFxBankDeal = f.transfer_type === 'FX Bank Deal';
-  const isFxLocal = f.transfer_type === 'FX Local';
+  const isFxLocal = f.transfer_type === 'FX Local' || f.transfer_type === 'FX - Corporate Settlement';
   const isFxInterco = f.transfer_type === 'FX-Intercompany';
   const showCounterparty = isFxLocal || isFxInterco;
   const showDestination = !isFxBankDeal;
@@ -73,10 +73,10 @@ export default function NewDealPage() {
         const r = parseFloat(k === 'rate' ? v : next.rate) || 0;
         next.amount = (ca > 0 && r > 0) ? (ca * r).toFixed(2) : '';
       }
-      if (k === 'from_type') { next.from_bank = ''; next.from_account_num = ''; next.from_wallet_address = ''; }
-      if (k === 'to_type') { next.to_bank = ''; next.to_account_num = ''; next.to_wallet_address = ''; }
-      if (k === 'ours_type') { next.ours_bank = ''; next.ours_account_num = ''; next.ours_wallet_address = ''; }
-      if (k === 'buying_ours_type') { next.buying_ours_bank = ''; next.buying_ours_account_num = ''; next.buying_ours_wallet_address = ''; }
+      if (k === 'from_type') { next.from_bank = ''; next.from_account_num = ''; next.from_wallet_address = ''; next.from_network = ''; }
+      if (k === 'to_type') { next.to_bank = ''; next.to_account_num = ''; next.to_wallet_address = ''; next.to_network = ''; }
+      if (k === 'ours_type') { next.ours_bank = ''; next.ours_account_num = ''; next.ours_wallet_address = ''; next.ours_network = ''; }
+      if (k === 'buying_ours_type') { next.buying_ours_bank = ''; next.buying_ours_account_num = ''; next.buying_ours_wallet_address = ''; next.buying_ours_network = ''; }
       if (k === 'from_bank') { next.from_account_num = ''; }
       if (k === 'to_bank') { next.to_account_num = ''; }
       if (k === 'ours_bank') { next.ours_account_num = ''; }
@@ -104,22 +104,22 @@ export default function NewDealPage() {
     if (f.from_type === 'bank') {
       if (!f.from_bank) errs.from_bank = 'Required';
       if (!f.from_account_num) errs.from_account_num = 'Required';
-    } else { if (!f.from_wallet_address) errs.from_wallet_address = 'Required'; }
+    } else { if (!f.from_wallet_address) errs.from_wallet_address = 'Required'; if (!f.from_network) errs.from_network = 'Required'; }
     if (showDestination) {
       if (f.to_type === 'bank') {
         if (!f.to_bank) errs.to_bank = 'Required';
         if (!f.to_account_num) errs.to_account_num = 'Required';
-      } else { if (!f.to_wallet_address) errs.to_wallet_address = 'Required'; }
+      } else { if (!f.to_wallet_address) errs.to_wallet_address = 'Required'; if (!f.to_network) errs.to_network = 'Required'; }
     }
     if (f.ours_type === 'bank') {
       if (!f.ours_bank) errs.ours_bank = 'Required';
       if (!f.ours_account_num) errs.ours_account_num = 'Required';
-    } else { if (!f.ours_wallet_address) errs.ours_wallet_address = 'Required'; }
+    } else { if (!f.ours_wallet_address) errs.ours_wallet_address = 'Required'; if (!f.ours_network) errs.ours_network = 'Required'; }
     if (showBuyingOurs) {
       if (f.buying_ours_type === 'bank') {
         if (!f.buying_ours_bank) errs.buying_ours_bank = 'Required';
         if (!f.buying_ours_account_num) errs.buying_ours_account_num = 'Required';
-      } else { if (!f.buying_ours_wallet_address) errs.buying_ours_wallet_address = 'Required'; }
+      } else { if (!f.buying_ours_wallet_address) errs.buying_ours_wallet_address = 'Required'; if (!f.buying_ours_network) errs.buying_ours_network = 'Required'; }
     }
     setErrors(errs);
     return Object.keys(errs).length === 0;
@@ -264,9 +264,12 @@ export default function NewDealPage() {
                   <BankAccountSelect bankName={f.from_bank} value={f.from_account_num} name="from_account_num" onChange={up} banks={safeRef.banks} tid="from-account" error={errors.from_account_num} />
                 </>
               ) : (
-                <VField label="Wallet Address" error={errors.from_wallet_address}>
-                  <Input name="from_wallet_address" value={f.from_wallet_address} onChange={onInput} placeholder="Enter crypto wallet address" data-testid="from-wallet-input" className={errors.from_wallet_address ? 'border-red-400' : ''} />
-                </VField>
+                <>
+                  <VField label="Wallet Address" error={errors.from_wallet_address}>
+                    <Input name="from_wallet_address" value={f.from_wallet_address} onChange={onInput} placeholder="Enter crypto wallet address" data-testid="from-wallet-input" className={errors.from_wallet_address ? 'border-red-400' : ''} />
+                  </VField>
+                  <NetworkSelect value={f.from_network} name="from_network" onChange={up} tid="from-network" error={errors.from_network} />
+                </>
               )}
             </CardContent>
           </Card>
@@ -291,9 +294,12 @@ export default function NewDealPage() {
                   <BankAccountSelect bankName={f.to_bank} value={f.to_account_num} name="to_account_num" onChange={up} banks={safeRef.banks} tid="to-account" error={errors.to_account_num} />
                 </>
               ) : (
-                <VField label="Wallet Address" error={errors.to_wallet_address}>
-                  <Input name="to_wallet_address" value={f.to_wallet_address} onChange={onInput} placeholder="Enter crypto wallet address" data-testid="to-wallet-input" className={errors.to_wallet_address ? 'border-red-400' : ''} />
-                </VField>
+                <>
+                  <VField label="Wallet Address" error={errors.to_wallet_address}>
+                    <Input name="to_wallet_address" value={f.to_wallet_address} onChange={onInput} placeholder="Enter crypto wallet address" data-testid="to-wallet-input" className={errors.to_wallet_address ? 'border-red-400' : ''} />
+                  </VField>
+                  <NetworkSelect value={f.to_network} name="to_network" onChange={up} tid="to-network" error={errors.to_network} />
+                </>
               )}
             </CardContent>
           </Card>
@@ -331,9 +337,12 @@ export default function NewDealPage() {
                   <BankAccountSelect bankName={f.ours_bank} value={f.ours_account_num} name="ours_account_num" onChange={up} banks={safeRef.banks} tid="ours-account" error={errors.ours_account_num} />
                 </>
               ) : (
-                <VField label="Wallet Address" error={errors.ours_wallet_address}>
-                  <Input name="ours_wallet_address" value={f.ours_wallet_address} onChange={onInput} placeholder="Enter crypto wallet address" data-testid="ours-wallet-input" className={errors.ours_wallet_address ? 'border-red-400' : ''} />
-                </VField>
+                <>
+                  <VField label="Wallet Address" error={errors.ours_wallet_address}>
+                    <Input name="ours_wallet_address" value={f.ours_wallet_address} onChange={onInput} placeholder="Enter crypto wallet address" data-testid="ours-wallet-input" className={errors.ours_wallet_address ? 'border-red-400' : ''} />
+                  </VField>
+                  <NetworkSelect value={f.ours_network} name="ours_network" onChange={up} tid="ours-network" error={errors.ours_network} />
+                </>
               )}
             </div>
           </CardContent>
@@ -358,9 +367,12 @@ export default function NewDealPage() {
                   <BankAccountSelect bankName={f.buying_ours_bank} value={f.buying_ours_account_num} name="buying_ours_account_num" onChange={up} banks={safeRef.banks} tid="buying-ours-account" error={errors.buying_ours_account_num} />
                 </>
               ) : (
-                <VField label="Wallet Address" error={errors.buying_ours_wallet_address}>
-                  <Input name="buying_ours_wallet_address" value={f.buying_ours_wallet_address} onChange={onInput} placeholder="Enter crypto wallet address" data-testid="buying-ours-wallet-input" className={errors.buying_ours_wallet_address ? 'border-red-400' : ''} />
-                </VField>
+                <>
+                  <VField label="Wallet Address" error={errors.buying_ours_wallet_address}>
+                    <Input name="buying_ours_wallet_address" value={f.buying_ours_wallet_address} onChange={onInput} placeholder="Enter crypto wallet address" data-testid="buying-ours-wallet-input" className={errors.buying_ours_wallet_address ? 'border-red-400' : ''} />
+                  </VField>
+                  <NetworkSelect value={f.buying_ours_network} name="buying_ours_network" onChange={up} tid="buying-ours-network" error={errors.buying_ours_network} />
+                </>
               )}
             </div>
           </CardContent>

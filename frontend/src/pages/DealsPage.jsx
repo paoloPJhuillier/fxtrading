@@ -456,7 +456,7 @@ const DealRow = memo(function DealRow({ deal, onView }) {
       <TableCell className="text-sm">{deal.client_name || '-'}</TableCell>
       <TableCell className="text-sm">{deal.transaction_type}</TableCell>
       <TableCell className="font-mono text-xs">{deal.buy_currency}/{deal.sell_currency}</TableCell>
-      <TableCell className="text-right font-mono text-xs">{Number(deal.amount).toLocaleString()}</TableCell>
+      <TableCell className="text-right font-mono text-xs">{Number(deal.currency_amount).toLocaleString()} <span className="text-slate-400">{deal.buy_currency}</span></TableCell>
       <TableCell className="text-right font-mono text-xs">{deal.rate}</TableCell>
       <TableCell className="text-xs">{format(new Date(deal.deal_date + 'T00:00:00'), 'dd MMM yyyy')}</TableCell>
       <TableCell><Badge className={SB[deal.status]}>{deal.status}</Badge></TableCell>

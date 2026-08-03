@@ -10,11 +10,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Plus, Pencil, Trash2, CreditCard } from 'lucide-react';
+import { Plus, Pencil, Trash2, CreditCard, Upload } from 'lucide-react';
 import { toast } from 'sonner';
 
 const TABS = [
-  { value: 'companies', label: 'Companies' },
+  { value: 'companies', label: 'FX Client' },
   { value: 'banks', label: 'Banks' },
   { value: 'counterparties', label: 'Counterparties' },
   { value: 'transaction-types', label: 'Transaction Types' },
@@ -37,6 +37,11 @@ export default function ReferenceDataPage() {
   const [acctLoading, setAcctLoading] = useState(false);
   const [acctForm, setAcctForm] = useState({ account_number: '', account_name: '' });
   const [acctEdit, setAcctEdit] = useState(null);
+
+  // Import state
+  const importFileRef = useRef(null);
+  const acctImportFileRef = useRef(null);
+  const [importing, setImporting] = useState(false);
 
   const hasLoaded = useRef(false);
   const load = useCallback(async (signal) => {
@@ -102,6 +107,7 @@ export default function ReferenceDataPage() {
 
   const saveAccount = async () => {
     if (!acctForm.account_number.trim()) { toast.error('Account number is required'); return; }
+    if (!acctForm.account_name.trim()) { toast.error('Account name is required'); return; }
     try {
       if (acctEdit) {
         const r = await api.put(`/reference/banks/${acctBank.id}/accounts/${acctEdit.id}`, acctForm);
@@ -131,6 +137,35 @@ export default function ReferenceDataPage() {
     setAcctForm({ account_number: acct.account_number, account_name: acct.account_name || '' });
   };
 
+  const handleImportCompanies = async (e) => {
+    if (!e.target.files?.length) return;
+    setImporting(true);
+    try {
+      const fd = new FormData();
+      fd.append('file', e.target.files[0]);
+      const r = await api.post('/reference/companies/import', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+      toast.success(`Imported ${r.data.created} FX client(s), ${r.data.skipped} skipped`);
+      if (r.data.errors?.length > 0) toast.warning(`Errors: ${r.data.errors.slice(0, 3).join('; ')}`);
+      load(); reloadRefData();
+    } catch (err) { toast.error(err.response?.data?.detail || 'Import failed'); }
+    finally { setImporting(false); e.target.value = ''; }
+  };
+
+  const handleImportAccounts = async (e) => {
+    if (!e.target.files?.length || !acctBank) return;
+    setImporting(true);
+    try {
+      const fd = new FormData();
+      fd.append('file', e.target.files[0]);
+      const r = await api.post(`/reference/banks/${acctBank.id}/accounts/import`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+      toast.success(`Imported ${r.data.created} account(s), ${r.data.skipped} skipped`);
+      if (r.data.errors?.length > 0) toast.warning(`Errors: ${r.data.errors.slice(0, 3).join('; ')}`);
+      const ra = await api.get(`/reference/banks/${acctBank.id}/accounts`);
+      setBankAccounts(ra.data);
+    } catch (err) { toast.error(err.response?.data?.detail || 'Import failed'); }
+    finally { setImporting(false); e.target.value = ''; }
+  };
+
   return (
     <div data-testid="reference-data-page">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
@@ -138,9 +173,19 @@ export default function ReferenceDataPage() {
           <h1 className="text-3xl font-bold text-[#08263e]" style={{ fontFamily: 'Chivo' }}>Reference Data</h1>
           <p className="text-sm text-slate-500 mt-1">Manage system reference data</p>
         </div>
-        <Button className="bg-[#08263e] hover:bg-[#08263e]/90" onClick={openNew} data-testid="add-item-btn">
-          <Plus className="h-4 w-4 mr-2" /> Add New
-        </Button>
+        <div className="flex gap-2">
+          {tab === 'companies' && (
+            <>
+              <input type="file" ref={importFileRef} className="hidden" accept=".csv,.xlsx,.xls" onChange={handleImportCompanies} data-testid="import-companies-input" />
+              <Button variant="outline" onClick={() => importFileRef.current?.click()} disabled={importing} data-testid="import-companies-btn">
+                <Upload className="h-4 w-4 mr-2" /> {importing ? 'Importing...' : 'Import CSV/Excel'}
+              </Button>
+            </>
+          )}
+          <Button className="bg-[#08263e] hover:bg-[#08263e]/90" onClick={openNew} data-testid="add-item-btn">
+            <Plus className="h-4 w-4 mr-2" /> Add New
+          </Button>
+        </div>
       </div>
 
       <Tabs value={tab} onValueChange={setTab}>
@@ -187,7 +232,7 @@ export default function ReferenceDataPage() {
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent data-testid="ref-item-dialog">
           <DialogHeader>
-            <DialogTitle style={{ fontFamily: 'Chivo' }}>{edit ? 'Edit' : 'Add'} {TABS.find(t => t.value === tab)?.label?.replace(/s$/, '')}</DialogTitle>
+            <DialogTitle style={{ fontFamily: 'Chivo' }}>{edit ? 'Edit' : 'Add'} {tab === 'companies' ? 'FX Client' : TABS.find(t => t.value === tab)?.label?.replace(/s$/, '')}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-1.5">
@@ -237,7 +282,15 @@ export default function ReferenceDataPage() {
       <Dialog open={acctDialogOpen} onOpenChange={o => { if (!o) { setAcctDialogOpen(false); setAcctBank(null); } }}>
         <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto" data-testid="bank-accounts-dialog">
           <DialogHeader>
-            <DialogTitle style={{ fontFamily: 'Chivo' }}>Manage Accounts — {acctBank?.name}</DialogTitle>
+            <div className="flex items-center justify-between">
+              <DialogTitle style={{ fontFamily: 'Chivo' }}>Manage Accounts — {acctBank?.name}</DialogTitle>
+              <div>
+                <input type="file" ref={acctImportFileRef} className="hidden" accept=".csv,.xlsx,.xls" onChange={handleImportAccounts} data-testid="import-accounts-input" />
+                <Button variant="outline" size="sm" onClick={() => acctImportFileRef.current?.click()} disabled={importing} data-testid="import-accounts-btn">
+                  <Upload className="h-3 w-3 mr-1.5" /> {importing ? 'Importing...' : 'Import'}
+                </Button>
+              </div>
+            </div>
           </DialogHeader>
           <div className="space-y-4">
             <div className="flex gap-2 items-end">
@@ -246,7 +299,7 @@ export default function ReferenceDataPage() {
                 <Input value={acctForm.account_number} onChange={e => setAcctForm(p => ({ ...p, account_number: e.target.value }))} placeholder="Enter account number" className="h-8 text-xs font-mono" data-testid="acct-number-input" />
               </div>
               <div className="flex-1 space-y-1">
-                <Label className="text-xs">Account Name (optional)</Label>
+                <Label className="text-xs">Account Name <span className="text-red-500">*</span></Label>
                 <Input value={acctForm.account_name} onChange={e => setAcctForm(p => ({ ...p, account_name: e.target.value }))} placeholder="e.g. USD Operating" className="h-8 text-xs" data-testid="acct-name-input" />
               </div>
               <Button size="sm" className="h-8 bg-[#08263e] hover:bg-[#08263e]/90" onClick={saveAccount} data-testid="save-account-btn">

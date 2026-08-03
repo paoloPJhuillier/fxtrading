@@ -1,0 +1,40 @@
+{
+  "summary": "Iteration 27 - Verified all 12 FX Tracker feedback items end-to-end. Backend pytest test_iter27_fx_revisions.py: 9/9 PASS. (1) FX Client tab label present in ReferenceDataPage TABS array (was Companies). (2) Add dialog shows 'Add FX Client' correctly. (3) USDC has name 'USD Circle' via GET /api/reference/currencies. (4) Treasury queue table has 'Last Action' column header + 'created' badge in row cells. (5) Treasury Amount cell shows '500 USDT' (currency_amount + currency label). (6) My Deals Amount cell shows '500 USDT', '1,000 USD' (currency_amount + currency label). (7) POST /api/reference/banks/{bank_id}/accounts rejects blank account_name with 400/422 and accepts valid account_name. (8) Bank account selector is a searchable Popover+Command combobox showing 'account_name / account_number' pairs (e.g., 'USD Operating / 1234567890'). (9) POST /api/reference/banks/{id}/accounts/import CSV import works (created:2, admin gated, trader gets 403). (10) POST /api/reference/companies/import CSV import works (created:2, admin gated, trader gets 403). (11) 'FX - Corporate Settlement' present in GET /api/reference/transfer-types AND in New Deal Transfer Type dropdown; selecting it swaps Source Company field for Counterparty (same as FX Local). (12) NetworkSelect dropdown shows exactly ['Select network...', 'SOLANA', 'ETHEREUM', 'TRON'] when from_type=crypto. (13/14) POST /api/deals with from_type=crypto persists from_network/to_network/ours_network correctly and GET returns them (verified ETHEREUM/SOLANA/TRON round-trip). Frontend Playwright on prod URL confirmed all UI flows for admin (Reference Data - FX Client tab, Add FX Client dialog, Import CSV/Excel buttons for FX Client and bank accounts, USD Circle in Currencies), treasury (Treasury queue Last Action + '500 USDT' amount), and trader (My Deals Last Action + amounts, New Deal with FX-Corporate-Settlement showing Counterparty, crypto Network dropdown, searchable Bank Account combobox with name+number display).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter27_fx_revisions.py",
+    "/app/test_reports/pytest/iter27.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "backend/server.py L134 - BankAccountUpdate.account_name is Optional[str]=None while BankAccountCreate.account_name is required str. If admin PUTs with account_name='' the model_dump-filter (v is not None) will pass empty string through unchanged; PUT path does not re-run the strip() validation that POST does. Add same non-empty-strip check to update_bank_account.",
+    "backend/server.py L1093 - Backfill 'USDC name USD Coin -> USD Circle' runs on every startup as a blanket update_many. Idempotent but does a DB write each boot; guard with a version flag like the transaction_types reseed.",
+    "backend/server.py L746-797 & L801-850 - Bank account import and companies import share ~40 lines of near-identical CSV/XLSX parsing logic. Extract to a shared `_parse_upload(file, required_columns)` helper to comply with DRY (>10 lines duplicated).",
+    "backend/server.py L1061-1068 - Transfer-types reseed inserts 'FX - Corporate Settlement' individually AFTER the reseed loop; the reseed_transfer_types flag path would already include it. The individual insert is defensive but if the version flag is set true the block at L1067 still runs and reinserts on every boot when missing - fine, but consider moving the corp-settle add inside the same reseed branch for clarity.",
+    "backend/server.py L802 - import_companies has no `db.companies.find_one({'name': name})` de-dup by name; only code is checked. Two rows with same name/different code will both be created. Consider dual-key uniqueness or accept as intentional.",
+    "frontend/src/components/DealFormFields.jsx L199 - `banks.find(b => b.name === bankName)` couples bank identity to display name. If two banks share the same name across regions this returns the wrong id. Prefer matching by bank id passed as prop.",
+    "frontend/src/pages/NewDealPage.jsx L47 - `isFxLocal = transfer_type === 'FX Local' || transfer_type === 'FX - Corporate Settlement'`. Variable name is misleading; rename to `isCounterpartyDeal` or drive off a boolean flag on the transfer_type entity from backend so future variants don't require frontend changes.",
+    "frontend/src/pages/ReferenceDataPage.jsx L235 - Dialog title falls back to `TABS.find(t => t.value === tab)?.label?.replace(/s$/, '')` which yields 'Bank' from 'Banks' etc., but for 'FX Client' the hard-coded ternary works only for 'companies' tab. For any future non-plural tab label this heuristic will produce wrong titles. Consider adding a `singular` field on TABS entries."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter27_fx_revisions.py (new - 9 tests covering items 3,7,9,10,11,12,14 + admin gating)"
+  ],
+  "success_rate": {
+    "backend": "100% (9/9)",
+    "frontend": "100% (14/14 UI checks: FX Client tab, Add FX Client dialog title, Import CSV buttons for FX Client + Bank Accounts, USD Circle currency, Treasury Last Action header, Treasury Amount w/ currency label, My Deals Last Action header, My Deals Amount w/ currency label, Transfer Type dropdown incl FX-Corporate-Settlement, Counterparty field on FX-Corp-Settle, Network dropdown SOLANA/ETHEREUM/TRON on crypto, searchable Bank Account combobox with name+number, crypto deal persistence, refdata tabs)"
+  },
+  "test_credentials": "trader@fxtracker.com/Trader@123, admin@fxtracker.com/Admin@123, treasury@fxtracker.com/Treasury@123 - all verified.",
+  "seed_data_creation": "Created 2 test deals via POST /api/deals - TEST_CORP_SETTLE (FX-20260803-0001, transfer_type=FX - Corporate Settlement, counterparty=CLSC, 1000 USD) and TEST_CRYPTO_NET (FX-20260803-0002, transfer_type=FX Crypto Conversion, from/to/ours_network=ETHEREUM/SOLANA/TRON, 500 USDT). Also created and cleaned up TEST_ prefixed bank accounts, companies during import tests.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend pytest cmd: `REACT_APP_BACKEND_URL=$(grep REACT_APP_BACKEND_URL /app/frontend/.env | cut -d= -f2) python -m pytest backend/tests/test_iter27_fx_revisions.py -v`. Key testids: import-companies-btn, import-companies-input, import-accounts-btn, import-accounts-input, from-network-select (native <select>), from-account-select (combobox trigger), from-account-search (search input), from-bank-search. Deal payload requires both `amount` and `from_company` (in addition to currency_amount). NetworkSelect uses native HTML <select> not shadcn Select. Bank account combobox uses shadcn Popover+Command. Treasury and MyDeals rows show currency_amount with currency code appended (e.g., '500 USDT' via TreasuryRow / DealRow rendering).",
+  "rca of the issue": "No issues found. All 12 items work end-to-end at API and UI layers."
+}

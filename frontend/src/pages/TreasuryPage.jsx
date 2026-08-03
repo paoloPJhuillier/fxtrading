@@ -26,7 +26,7 @@ const SB = {
 };
 const PAGE_SIZE = 20;
 
-const DEFAULT_COLS = { reference: true, client: true, type: true, pair: true, amount: true, rate: true, from_bank: true, to_bank: true, deal_date: true, status: true };
+const DEFAULT_COLS = { reference: true, client: true, type: true, pair: true, amount: true, rate: true, from_bank: true, to_bank: true, deal_date: true, status: true, last_action: true };
 
 export default function TreasuryPage() {
   const { data: ref } = useRefData();
@@ -172,7 +172,7 @@ export default function TreasuryPage() {
               {[
                 ['reference', 'Reference'], ['client', 'Client'], ['type', 'Type'], ['pair', 'Pair'],
                 ['amount', 'Amount'], ['rate', 'Rate'], ['from_bank', 'From Bank'], ['to_bank', 'To Bank'],
-                ['deal_date', 'Deal Date'], ['status', 'Status'],
+                ['deal_date', 'Deal Date'], ['status', 'Status'], ['last_action', 'Last Action'],
               ].map(([key, label]) => (
                 <div key={key} className="flex items-center gap-2">
                   <Switch checked={cols[key]} onCheckedChange={() => toggleCol(key)} id={`col-${key}`} data-testid={`col-toggle-${key}`} />
@@ -252,6 +252,7 @@ export default function TreasuryPage() {
                     {cols.to_bank && <TableHead>To Bank</TableHead>}
                     {cols.deal_date && <TableHead>Deal Date</TableHead>}
                     {cols.status && tabKey !== 'pending' && <TableHead>Status</TableHead>}
+                    {cols.last_action && <TableHead>Last Action</TableHead>}
                     <TableHead>Action</TableHead>
                   </TableRow></TableHeader>
                   <TableBody>{list.map(d => (
@@ -462,16 +463,6 @@ function ProofGrid({ proofs, onDelete }) {
   );
 }
 
-const HISTORY_COLORS = {
-  created: 'bg-blue-100 text-blue-700',
-  deal_confirmed: 'bg-green-100 text-green-700',
-  deal_returned: 'bg-red-100 text-red-700',
-  deal_cancelled: 'bg-slate-200 text-slate-600',
-  deal_resubmitted: 'bg-purple-100 text-purple-700',
-  deal_edited: 'bg-amber-100 text-amber-700',
-  proof_uploaded: 'bg-cyan-100 text-cyan-700',
-};
-
 function DealHistory({ history }) {
   return (
     <div data-testid="deal-history">
@@ -506,19 +497,39 @@ function DealHistory({ history }) {
   );
 }
 
+const HISTORY_COLORS = {
+  created: 'bg-blue-100 text-blue-700',
+  deal_confirmed: 'bg-green-100 text-green-700',
+  deal_returned: 'bg-red-100 text-red-700',
+  deal_cancelled: 'bg-slate-200 text-slate-600',
+  deal_resubmitted: 'bg-purple-100 text-purple-700',
+  deal_edited: 'bg-amber-100 text-amber-700',
+  proof_uploaded: 'bg-cyan-100 text-cyan-700',
+};
+
 const TreasuryRow = memo(function TreasuryRow({ deal, cols, showStatus, onReview }) {
+  const lastAction = deal.history?.length > 0 ? deal.history[deal.history.length - 1] : null;
   return (
     <TableRow data-testid={`deal-row-${deal.id}`}>
       {cols.reference && <TableCell className="font-mono text-xs font-medium">{deal.reference_number}</TableCell>}
       {cols.client && <TableCell className="text-sm">{deal.client_name || '-'}</TableCell>}
       {cols.type && <TableCell className="text-sm">{deal.transaction_type}</TableCell>}
       {cols.pair && <TableCell className="font-mono text-xs">{deal.buy_currency}/{deal.sell_currency}</TableCell>}
-      {cols.amount && <TableCell className="text-right font-mono text-xs">{Number(deal.amount).toLocaleString()}</TableCell>}
+      {cols.amount && <TableCell className="text-right font-mono text-xs">{Number(deal.currency_amount).toLocaleString()} <span className="text-slate-400">{deal.buy_currency}</span></TableCell>}
       {cols.rate && <TableCell className="text-right font-mono text-xs">{deal.rate}</TableCell>}
       {cols.from_bank && <TableCell className="text-xs">{deal.from_bank || '-'}</TableCell>}
       {cols.to_bank && <TableCell className="text-xs">{deal.to_bank || '-'}</TableCell>}
       {cols.deal_date && <TableCell className="text-xs">{format(new Date(deal.deal_date + 'T00:00:00'), 'dd MMM yyyy')}</TableCell>}
       {cols.status && showStatus && <TableCell><Badge className={SB[deal.status]}>{deal.status}</Badge></TableCell>}
+      {cols.last_action && <TableCell className="text-[10px] text-slate-500 max-w-[120px]">
+        {lastAction ? (
+          <span title={lastAction.remarks || lastAction.action.replace(/_/g, ' ')}>
+            <Badge className={`${HISTORY_COLORS[lastAction.action] || 'bg-slate-100 text-slate-600'} text-[9px] px-1 py-0`}>
+              {lastAction.action.replace(/^deal_/, '').replace(/_/g, ' ')}
+            </Badge>
+          </span>
+        ) : '-'}
+      </TableCell>}
       <TableCell>
         <Button size="sm" variant="outline" onClick={() => onReview(deal)} data-testid={`review-deal-${deal.id}`}>
           <Eye className="h-3 w-3 mr-1" /> {deal.status === 'pending' ? 'Review' : 'View'}

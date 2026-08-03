@@ -66,6 +66,24 @@ export const TypeToggle = memo(function TypeToggle({ value, name, onChange, test
   );
 });
 
+const CRYPTO_NETWORKS = ['SOLANA', 'ETHEREUM', 'TRON'];
+
+export const NetworkSelect = memo(function NetworkSelect({ value, name, onChange, tid, error }) {
+  return (
+    <VField label="Network" error={error}>
+      <select
+        value={value || ''}
+        onChange={e => onChange(name, e.target.value)}
+        data-testid={`${tid}-select`}
+        className={`w-full h-9 rounded-md border px-3 text-sm ${error ? 'border-red-400' : 'border-input'} bg-background`}
+      >
+        <option value="">Select network...</option>
+        {CRYPTO_NETWORKS.map(n => <option key={n} value={n}>{n}</option>)}
+      </select>
+    </VField>
+  );
+});
+
 export const DatePick = memo(function DatePick({ label, value, name, onChange, tid, error }) {
   const [open, setOpen] = useState(false);
   const handleSelect = useCallback(d => {
@@ -175,6 +193,7 @@ export const BankAccountSelect = memo(function BankAccountSelect({ bankName, val
   const [open, setOpen] = useState(false);
   const [newMode, setNewMode] = useState(false);
   const [newAcct, setNewAcct] = useState('');
+  const [newAcctName, setNewAcctName] = useState('');
   const [adding, setAdding] = useState(false);
 
   const bankId = useMemo(() => banks.find(b => b.name === bankName)?.id, [bankName, banks]);
@@ -190,51 +209,55 @@ export const BankAccountSelect = memo(function BankAccountSelect({ bankName, val
     return () => { cancelled = true; };
   }, [bankId]);
 
+  const selectedAcct = useMemo(() => accounts.find(a => a.account_number === value), [accounts, value]);
+  const displayText = selectedAcct ? `${selectedAcct.account_name || ''} - ${selectedAcct.account_number}`.trim() : (value || '');
+
   const addAccount = async () => {
-    if (!newAcct.trim() || !bankId) return;
+    if (!newAcct.trim() || !newAcctName.trim() || !bankId) return;
     setAdding(true);
     try {
-      const r = await api.post(`/reference/banks/${bankId}/accounts`, { account_number: newAcct.trim() });
+      const r = await api.post(`/reference/banks/${bankId}/accounts`, { account_number: newAcct.trim(), account_name: newAcctName.trim() });
       setAccounts(p => [...p, r.data]);
       onChange(name, newAcct.trim());
-      setNewAcct(''); setNewMode(false); setOpen(false);
+      setNewAcct(''); setNewAcctName(''); setNewMode(false); setOpen(false);
       toast.success('Account added');
-    } catch (e) { toast.error('Failed to add account'); }
+    } catch (e) { toast.error(e.response?.data?.detail || 'Failed to add account'); }
     finally { setAdding(false); }
   };
 
   if (!bankName) {
     return (
-      <VField label="Account Number" error={error}>
+      <VField label="Account" error={error}>
         <Input disabled placeholder="Select a bank first" className="bg-slate-50" data-testid={`${tid}-input`} />
       </VField>
     );
   }
 
   return (
-    <VField label="Account Number" error={error}>
-      <Popover open={open} onOpenChange={o => { setOpen(o); if (!o) { setNewMode(false); setNewAcct(''); } }}>
+    <VField label="Account" error={error}>
+      <Popover open={open} onOpenChange={o => { setOpen(o); if (!o) { setNewMode(false); setNewAcct(''); setNewAcctName(''); } }}>
         <PopoverTrigger asChild>
-          <Button variant="outline" role="combobox" className={`w-full justify-between text-left font-normal h-9 text-sm font-mono ${error ? 'border-red-400' : ''}`} data-testid={`${tid}-select`}>
-            <span className="truncate">{value || 'Select account...'}</span>
+          <Button variant="outline" role="combobox" className={`w-full justify-between text-left font-normal h-9 text-sm ${error ? 'border-red-400' : ''}`} data-testid={`${tid}-select`}>
+            <span className="truncate">{displayText || 'Search account...'}</span>
             <ChevronsUpDown className="ml-1 h-3.5 w-3.5 shrink-0 text-slate-400" />
           </Button>
         </PopoverTrigger>
-        <PopoverContent className="w-[280px] p-0" align="start">
+        <PopoverContent className="w-[320px] p-0" align="start">
           {newMode ? (
             <div className="p-3 space-y-2">
               <p className="text-xs font-medium text-slate-600">Add New Account</p>
-              <Input value={newAcct} onChange={e => setNewAcct(e.target.value)} placeholder="Enter account number" className="h-8 text-xs font-mono" data-testid={`${tid}-new-input`} autoFocus />
+              <Input value={newAcctName} onChange={e => setNewAcctName(e.target.value)} placeholder="Account name (required)" className="h-8 text-xs" data-testid={`${tid}-new-name-input`} autoFocus />
+              <Input value={newAcct} onChange={e => setNewAcct(e.target.value)} placeholder="Account number (required)" className="h-8 text-xs font-mono" data-testid={`${tid}-new-input`} />
               <div className="flex gap-2 justify-end">
-                <Button type="button" size="sm" variant="ghost" className="h-7 text-xs" onClick={() => { setNewMode(false); setNewAcct(''); }}>Cancel</Button>
-                <Button type="button" size="sm" className="h-7 text-xs bg-[#08263e] hover:bg-[#08263e]/90" onClick={addAccount} disabled={adding || !newAcct.trim()} data-testid={`${tid}-add-btn`}>
+                <Button type="button" size="sm" variant="ghost" className="h-7 text-xs" onClick={() => { setNewMode(false); setNewAcct(''); setNewAcctName(''); }}>Cancel</Button>
+                <Button type="button" size="sm" className="h-7 text-xs bg-[#08263e] hover:bg-[#08263e]/90" onClick={addAccount} disabled={adding || !newAcct.trim() || !newAcctName.trim()} data-testid={`${tid}-add-btn`}>
                   {adding ? 'Adding...' : 'Add'}
                 </Button>
               </div>
             </div>
           ) : (
             <Command>
-              <CommandInput placeholder="Search accounts..." data-testid={`${tid}-search`} />
+              <CommandInput placeholder="Search by name or number..." data-testid={`${tid}-search`} />
               <CommandList>
                 {loading ? (
                   <div className="py-6 text-center text-xs text-slate-400">Loading accounts...</div>
@@ -243,10 +266,12 @@ export const BankAccountSelect = memo(function BankAccountSelect({ bankName, val
                 ) : (
                   <CommandGroup>
                     {accounts.map(a => (
-                      <CommandItem key={a.id} value={a.account_number} onSelect={() => { onChange(name, a.account_number); setOpen(false); }}>
+                      <CommandItem key={a.id} value={`${a.account_name || ''} ${a.account_number}`} onSelect={() => { onChange(name, a.account_number); setOpen(false); }}>
                         <Check className={cn("mr-2 h-3 w-3", value === a.account_number ? "opacity-100" : "opacity-0")} />
-                        <span className="font-mono text-xs">{a.account_number}</span>
-                        {a.account_name && <span className="ml-2 text-xs text-slate-400">{a.account_name}</span>}
+                        <div className="flex flex-col">
+                          <span className="text-xs font-medium">{a.account_name || 'Unnamed'}</span>
+                          <span className="font-mono text-[10px] text-slate-400">{a.account_number}</span>
+                        </div>
                       </CommandItem>
                     ))}
                   </CommandGroup>
