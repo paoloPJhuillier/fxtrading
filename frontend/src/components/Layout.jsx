@@ -9,7 +9,7 @@ import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import {
   LayoutDashboard, FileText, PlusCircle, ClipboardCheck,
-  Database, Users, History, LogOut, Menu, TrendingUp, Activity, KeyRound, BarChart3, Settings
+  Database, Users, History, LogOut, Menu, TrendingUp, Activity, KeyRound, BarChart3, Settings, BookOpen
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -30,11 +30,13 @@ const navConfig = {
     { to: '/deals', icon: FileText, label: 'My Deals' },
     { to: '/deals/new', icon: PlusCircle, label: 'New Deal' },
     { to: '/reports', icon: BarChart3, label: 'Reports' },
+    { to: '/documentation', icon: BookOpen, label: 'Documentation' },
   ],
   treasury: [
     { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
     { to: '/treasury', icon: ClipboardCheck, label: 'Deal Queue' },
     { to: '/reports', icon: BarChart3, label: 'Reports' },
+    { to: '/documentation', icon: BookOpen, label: 'Documentation' },
   ],
   admin: [
     { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
@@ -43,6 +45,7 @@ const navConfig = {
     { to: '/transactions', icon: History, label: 'Transactions' },
     { to: '/audit-log', icon: Activity, label: 'Audit Trail' },
     { to: '/reports', icon: BarChart3, label: 'Reports' },
+    { to: '/documentation', icon: BookOpen, label: 'Documentation' },
   ],
   sysadmin: [
     ...([
@@ -52,6 +55,7 @@ const navConfig = {
       { to: '/transactions', icon: History, label: 'Transactions' },
       { to: '/audit-log', icon: Activity, label: 'Audit Trail' },
       { to: '/reports', icon: BarChart3, label: 'Reports' },
+      { to: '/documentation', icon: BookOpen, label: 'Documentation' },
     ]),
     { to: '/system', icon: Settings, label: 'System' },
   ],

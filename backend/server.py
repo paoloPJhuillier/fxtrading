@@ -1848,6 +1848,40 @@ async def system_db_stats(user=Depends(get_current_user)):
             stats[name] = await col.count_documents({})
     return {"stats": stats}
 
+# --- Documentation Downloads ---
+import zipfile as _zipfile
+DOCS_DIR = ROOT_DIR.parent / "docs"
+
+@api_router.get("/documentation/list")
+async def list_docs():
+    if not DOCS_DIR.is_dir():
+        return []
+    exts = {'.pdf', '.docx', '.xlsx', '.md'}
+    return [{"name": f.name, "size": f.stat().st_size, "type": f.suffix.lstrip('.')} for f in sorted(DOCS_DIR.iterdir()) if f.suffix.lower() in exts and f.is_file()]
+
+@api_router.get("/documentation/download/{filename}")
+async def download_doc(filename: str):
+    safe = Path(filename).name
+    fp = DOCS_DIR / safe
+    if not fp.is_file() or fp.suffix.lower() not in {'.pdf', '.docx', '.xlsx', '.md'}:
+        raise HTTPException(status_code=404, detail="File not found")
+    ct = {"pdf": "application/pdf", "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+          "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "md": "text/markdown"}.get(fp.suffix.lstrip('.'), "application/octet-stream")
+    return Response(content=fp.read_bytes(), media_type=ct, headers={"Content-Disposition": f'attachment; filename="{safe}"'})
+
+@api_router.get("/documentation/download-all")
+async def download_all_docs():
+    if not DOCS_DIR.is_dir():
+        raise HTTPException(status_code=404, detail="Docs folder not found")
+    buf = io.BytesIO()
+    exts = {'.pdf', '.docx', '.xlsx', '.md'}
+    with _zipfile.ZipFile(buf, 'w', _zipfile.ZIP_DEFLATED) as zf:
+        for f in sorted(DOCS_DIR.iterdir()):
+            if f.suffix.lower() in exts and f.is_file():
+                zf.write(f, f.name)
+    buf.seek(0)
+    return Response(content=buf.read(), media_type="application/zip", headers={"Content-Disposition": 'attachment; filename="FX_Trading_Tracker_Documentation.zip"'})
+
 app.include_router(api_router)
 
 app.add_middleware(
