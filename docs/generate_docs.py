@@ -136,15 +136,16 @@ ENV_VARS = [
 ]
 
 SCOPE_MAP = [
-    ("identity", "users", "users", "User accounts, credentials, roles"),
-    ("trading", "deals", "deals", "FX deal tickets with full lifecycle"),
+    ("identity", "users", "users", "User accounts, credentials, roles (trader, treasury, admin, sysadmin)"),
+    ("trading", "deals", "deals", "FX deal tickets with full lifecycle, counterparty, crypto networks"),
     ("trading", "deal_counters", "counters", "Sequential deal reference counters"),
-    ("reference", "companies", "companies", "Client/counterparty companies"),
+    ("reference", "companies", "companies", "FX Client/company entities"),
     ("reference", "banks", "banks", "Banking institutions with SWIFT codes"),
-    ("reference", "bank_accounts", "bank_accounts", "Bank account numbers per bank"),
-    ("reference", "currencies", "currencies", "Fiat, crypto, and stablecoin currencies"),
-    ("reference", "transaction_types", "transaction_types", "Today, Tomorrow, Spot"),
-    ("reference", "transfer_types", "transfer_types", "FX Crypto, FX Local, PDAX WD, FX Bank Deal"),
+    ("reference", "bank_accounts", "bank_accounts", "Bank accounts with name, number, currency, type, address"),
+    ("reference", "currencies", "currencies", "Fiat (31), stablecoin (16), and crypto (18) currencies"),
+    ("reference", "transaction_types", "transaction_types", "Buy, Sell"),
+    ("reference", "transfer_types", "transfer_types", "FX Crypto, FX Local, PDAX WD, FX Bank Deal, FX-Intercompany, FX - Corporate Settlement"),
+    ("reference", "counterparties", "counterparties", "PJL Group entities (CLSC, PJ, Verite, etc.)"),
     ("reference", "report_permissions", "report_permissions", "Per-role report access toggles"),
     ("audit", "audit_logs", "audit_logs", "Full audit trail of all actions"),
 ]
@@ -173,29 +174,42 @@ API_ENDPOINTS = [
     ("GET", "/api/files/{path}", "Public", "Download uploaded file by storage path"),
     ("DELETE", "/api/deals/{deal_id}/proofs/{proof_id}", "All", "Delete settlement proof"),
     # Reference Data
-    ("GET", "/api/reference/{entity_type}", "All", "List reference items (companies, banks, currencies, etc.)"),
+    ("GET", "/api/reference/{entity_type}", "All", "List reference items (companies, banks, currencies, counterparties, etc.)"),
     ("POST", "/api/reference/{entity_type}", "Admin", "Create reference item"),
     ("PUT", "/api/reference/{entity_type}/{item_id}", "Admin", "Update reference item"),
     ("DELETE", "/api/reference/{entity_type}/{item_id}", "Admin", "Delete reference item"),
     # Bank Accounts
     ("GET", "/api/reference/banks/{bank_id}/accounts", "All", "List bank accounts for a bank"),
-    ("POST", "/api/reference/banks/{bank_id}/accounts", "All", "Add bank account"),
-    ("PUT", "/api/reference/banks/{bank_id}/accounts/{account_id}", "Admin", "Update bank account"),
-    ("DELETE", "/api/reference/banks/{bank_id}/accounts/{account_id}", "Admin", "Delete bank account"),
+    ("POST", "/api/reference/banks/{bank_id}/accounts", "All", "Add bank account (account_name required)"),
+    ("PUT", "/api/reference/banks/{bank_id}/accounts/{id}", "Admin", "Update bank account"),
+    ("DELETE", "/api/reference/banks/{bank_id}/accounts/{id}", "Admin", "Delete bank account"),
+    # Bulk Import
+    ("POST", "/api/reference/banks/{bank_id}/accounts/import", "Admin", "Import bank accounts CSV/Excel (per-bank)"),
+    ("POST", "/api/reference/bank-accounts/import", "Admin", "Global multi-bank import (fld_* format supported)"),
+    ("POST", "/api/reference/companies/import", "Admin", "Import FX Clients CSV/Excel"),
     # Dashboard & Audit
     ("GET", "/api/dashboard/stats", "All", "Dashboard statistics and aggregation"),
     ("GET", "/api/audit-logs", "Admin", "Audit trail with filters and pagination"),
     # Reports
-    ("GET", "/api/reports/deal-blotter", "All", "Deal Blotter (format=json|csv|pdf)"),
-    ("GET", "/api/reports/settlement", "All", "Settlement Report (format=json|csv|pdf)"),
+    ("GET", "/api/reports/deal-blotter", "All", "Deal Blotter (format=json|csv|pdf, paginated)"),
+    ("GET", "/api/reports/settlement", "All", "Settlement Report (format=json|csv|pdf, paginated)"),
     ("GET", "/api/reports/open-positions", "All", "Open Positions (format=json|csv|pdf)"),
-    ("GET", "/api/reports/audit-trail", "Admin", "Audit Trail Report (format=json|csv|pdf)"),
+    ("GET", "/api/reports/audit-trail", "Admin", "Audit Trail Report (format=json|csv|pdf, paginated)"),
     ("GET", "/api/reports/user-activity", "Admin", "User Activity Report (format=json|csv|pdf)"),
     ("GET", "/api/reports/volume-summary", "All", "Volume Summary (format=json|csv|pdf, group_by)"),
     ("GET", "/api/reports/client-activity", "All", "Client Activity Report (format=json|csv|pdf)"),
+    ("GET", "/api/reports/tms", "All", "TMS/SAP Report — 21-column mass upload format"),
+    ("GET/PUT", "/api/reports/permissions", "Admin", "Manage role-based report permissions"),
     # System
     ("GET", "/api/storage/status", "Admin", "Storage backend status and config"),
     ("GET", "/api/database/status", "Admin", "Database backend status and config"),
+    ("GET", "/api/system/stats", "Sysadmin", "Database collection counts"),
+    ("GET", "/api/system/export/{collection}", "Sysadmin", "Export collection as CSV or JSON"),
+    ("POST", "/api/system/reset", "Sysadmin", "Controlled database reset (retains users/ref data)"),
+    # Documentation
+    ("GET", "/api/documentation/list", "All", "List available documentation files"),
+    ("GET", "/api/documentation/download/{filename}", "All", "Download single doc file"),
+    ("GET", "/api/documentation/download-all", "All", "Download all docs as ZIP archive"),
 ]
 
 DATA_MODELS = [
@@ -205,26 +219,31 @@ DATA_MODELS = [
         ("first_name", "string", "First name"),
         ("last_name", "string", "Last name"),
         ("password_hash", "string", "Bcrypt hashed password"),
-        ("role", "string", "admin | trader | treasury"),
+        ("role", "string", "admin | trader | treasury | sysadmin"),
         ("is_active", "boolean", "Account enabled flag"),
         ("created_at", "string (ISO 8601)", "Creation timestamp"),
     ]),
     ("deals", [
         ("id", "string (UUID)", "Unique identifier"),
         ("reference_number", "string", "Sequential ref (FX-YYYYMMDD-NNNN)"),
-        ("transaction_type", "string", "Today | Tomorrow | Spot"),
-        ("transfer_type", "string", "FX Crypto | FX Local | PDAX WD"),
+        ("transaction_type", "string", "Buy | Sell"),
+        ("transfer_type", "string", "FX Crypto | FX Local | PDAX WD | FX Bank Deal | FX-Intercompany | FX - Corporate Settlement"),
         ("deal_date", "string (YYYY-MM-DD)", "Deal execution date"),
         ("value_date", "string (YYYY-MM-DD)", "Settlement value date"),
         ("client_name", "string", "Client/counterparty name"),
+        ("counterparty", "string", "PJL Group entity (FX Local/Intercompany/Corp Settlement)"),
         ("from_type / to_type / ours_type", "string", "bank | crypto"),
         ("from_company / to_company", "string", "Company name"),
-        ("from_bank / to_bank / ours_bank", "string", "Bank code"),
+        ("from_bank / to_bank / ours_bank", "string", "Bank name"),
         ("from_account_num / to_account_num / ours_account_num", "string", "Account number"),
         ("from_wallet_address / to_wallet_address / ours_wallet_address", "string", "Crypto wallet"),
-        ("buy_currency / sell_currency", "string", "Currency code"),
-        ("currency_amount", "float", "Buy currency amount"),
-        ("amount", "float", "Settlement amount"),
+        ("from_network / to_network / ours_network", "string", "Crypto network: SOLANA | ETHEREUM | TRON"),
+        ("buying_ours_type / buying_ours_bank / buying_ours_account_num", "string", "Buying Counterparty Ours (FX-Intercompany)"),
+        ("buying_ours_wallet_address / buying_ours_network", "string", "Buying Counterparty crypto (FX-Intercompany)"),
+        ("buy_currency", "string", "Currency code"),
+        ("sell_currency", "string", "Optional sell currency"),
+        ("currency_amount", "float", "Principal/original amount"),
+        ("amount", "float", "Converted amount (currency_amount x rate)"),
         ("rate", "float", "Exchange rate"),
         ("status", "string", "pending | confirmed | returned | cancelled"),
         ("remarks", "string", "Trader remarks"),
@@ -234,6 +253,19 @@ DATA_MODELS = [
         ("created_by / created_by_name", "string", "Creator user ID and name"),
         ("processed_by / processed_by_name", "string", "Treasury processor ID and name"),
         ("created_at / updated_at", "string (ISO 8601)", "Timestamps"),
+    ]),
+    ("bank_accounts", [
+        ("id", "string (UUID)", "Unique identifier"),
+        ("bank_id", "string (UUID)", "Foreign key to bank"),
+        ("account_number", "string", "Bank account number"),
+        ("account_name", "string", "Account descriptive name (required)"),
+        ("currency_code", "string", "PHP, USD, etc. (from import)"),
+        ("account_type", "string", "SA, CA, etc. (from import)"),
+        ("bank_address", "string", "Branch address (from import)"),
+        ("contact_no", "string", "Contact number (from import)"),
+        ("account_alias", "string", "Short alias (from import)"),
+        ("is_active", "boolean", "Account enabled flag"),
+        ("created_at", "string (ISO 8601)", "Creation timestamp"),
     ]),
     ("audit_logs", [
         ("id", "string (UUID)", "Unique identifier"),
@@ -250,43 +282,70 @@ DATA_MODELS = [
 
 REPORTS = [
     ("Deal Blotter", "Complete log of all executed deals", "Date range, status, client, currency", "All roles"),
-    ("Settlement Report", "Deals grouped by value date with bank details and proof status", "Date range", "All roles"),
+    ("Settlement Report", "Deals grouped by value date with bank details and proof status; FX-Intercompany dual lines (.1/.2)", "Date range, from/to bank", "All roles"),
     ("Open Positions", "Pending deals grouped by currency pair showing net buy/sell exposure", "None (current snapshot)", "All roles"),
-    ("Transaction Audit Trail", "Full history of every deal action with timestamps and change logs", "Date range", "Admin only"),
+    ("Transaction Audit Trail", "Full history of every deal action with timestamps and change logs", "Date range, user", "Admin only"),
     ("User Activity", "Per-user breakdown of deals created, processed, returned, proofs uploaded", "Date range", "Admin only"),
     ("Volume Summary", "Deal counts and volumes grouped by day, week, or month", "Date range, group by", "All roles"),
-    ("Client Activity", "Per-client deal volume, frequency, average deal size, currency pairs", "Date range", "All roles"),
+    ("Client Activity", "Per-client deal volume, frequency, average deal size, currency pairs", "Date range, client", "All roles"),
+    ("TMS Report (SAP)", "21-column SAP mass upload format; FX-Intercompany generates .1 (Sell) + .2 (Buy) rows", "Date range", "All roles"),
 ]
 
 BUSINESS_RULES = [
-    ("FX Bank Deal Transfer Type", [
-        "When transfer_type = 'FX Bank Deal', the Destination (To) section is hidden in the UI",
-        "Server coerces to_type/to_company/to_bank/to_account_num to empty on deal creation",
-        "Client Settlement Proof upload is blocked (UI hidden + server returns 400)",
-        "Only Processor Settlement Proofs are applicable for FX Bank Deal",
+    ("Transaction Types", [
+        "Two transaction types: Buy and Sell",
+        "Transaction type is selected via dropdown in the deal form",
     ]),
-    ("Currency Conversion — SALE Perspective", [
-        "When Buy Currency = PHP and Sell Currency is any non-PHP currency, auto-divide mode activates",
-        "Formula: Converted Amount = Currency Amount / Exchange Rate (instead of multiplication)",
-        "Blue info box displayed: 'Auto-divide mode: Buy PHP / Rate = Converted Amount (SALE perspective)'",
-        "Rate summary shows division symbol (÷) instead of multiplication (×)",
-        "All other currency combinations use standard multiplication",
+    ("Transfer Types and Conditional Form Logic", [
+        "6 transfer types: FX Crypto Conversion, FX Local, PDAX Withdrawal, FX Bank Deal, FX-Intercompany, FX - Corporate Settlement",
+        "FX Bank Deal: Destination (To) section is hidden; server clears to_* fields; client proof upload blocked",
+        "FX Local and FX - Corporate Settlement: Source/Destination show Counterparty dropdown instead of Company",
+        "FX-Intercompany: Both Source and Destination show Counterparty; dual Ours sections (Selling Counterparty Ours + Buying Counterparty Ours)",
+    ]),
+    ("Counterparty Management", [
+        "Counterparties are PJL Group entities (e.g., CLSC, PJ, Verite) managed in Admin Reference Data",
+        "Counterparty field appears for FX Local, FX - Corporate Settlement, and FX-Intercompany transfer types",
+        "Counterparty represents the PJL Group entity for the deal, not a separate independent party",
+    ]),
+    ("Crypto Network Selection", [
+        "When any account section (Source, Destination, Ours) is set to Crypto mode, a Network dropdown is required",
+        "Available networks: SOLANA, ETHEREUM, TRON",
+        "Network is persisted as from_network, to_network, ours_network, buying_ours_network",
+    ]),
+    ("Currency and Amount Handling", [
+        "Single currency dropdown (Buy Currency) with searchable autocomplete",
+        "Converted Amount = Currency Amount x Exchange Rate",
+        "Amount fields display with locale-aware comma formatting",
+        "Tables show currency_amount (original principal) with currency label instead of converted amount",
     ]),
     ("Settlement Proof Access Control", [
         "Client Settlement Proofs: only Traders can upload (Treasury can view only)",
         "Processor Settlement Proofs: Treasury can upload",
         "Both proof types: all roles can view and download",
         "Treasury cannot confirm a deal if zero settlement proofs are attached (UI + server enforced)",
+        "Client proofs are not applicable for FX Bank Deal transactions",
     ]),
-    ("Number Formatting", [
-        "Currency Amount input shows comma-formatted helper text below the field",
-        "Converted Amount field displays with locale-aware comma formatting",
-        "Amount fields accept decimal input (stripped of non-numeric characters except '.')",
+    ("Bank Account Management", [
+        "Account Name is required when creating bank accounts",
+        "Bank account selectors show searchable autocomplete with account name + account number",
+        "CSV/Excel import supported per-bank and globally (multi-bank with auto bank creation)",
+        "Legacy fld_* format auto-detected: fld_AccountNo, fld_BranchAddress, fld_BankCode, fld_CurrencyCode, fld_AccountType",
+        "Extended fields persisted: currency_code, account_type, bank_address, contact_no, account_alias",
     ]),
-    ("Deal History", [
-        "All deal mutations are recorded in the history array (created, confirmed, returned, cancelled, edited, resubmitted, proof uploaded/deleted)",
-        "My Deals table shows 'Last Action' column with colored badges",
+    ("FX-Intercompany Dual-Line Handling", [
+        "FX-Intercompany deals generate dual settlement/TMS lines: .1 (Sell side) and .2 (Buy side)",
+        "Each line has its own counterparty ours account details",
+        "Both lines appear in Settlement Report and TMS Report",
+    ]),
+    ("Deal History and Last Action", [
+        "All deal mutations recorded in history array (created, confirmed, returned, cancelled, edited, resubmitted, proof uploaded/deleted)",
+        "My Deals and Treasury Queue tables show Last Action column with colored badges",
         "List API truncates history to last 3 entries for performance; detail API returns full history",
+    ]),
+    ("System Administration", [
+        "Sysadmin role: full admin access + database stats, collection exports, controlled reset",
+        "Database reset clears deals, audit logs, counters, report permissions",
+        "Database reset retains users, reference data, and bank accounts",
     ]),
 ]
 
@@ -770,7 +829,8 @@ def deploy_pdf_sections(elems, ss):
     tbl(["Role", "Email", "Password"],
         [["Admin", "admin@fxtracker.com", "Admin@123"],
          ["Trader", "trader@fxtracker.com", "Trader@123"],
-         ["Treasury", "treasury@fxtracker.com", "Treasury@123"]],
+         ["Treasury", "treasury@fxtracker.com", "Treasury@123"],
+         ["System Admin", "sysadmin@fxtracker.com", "SysAdmin@123"]],
         widths=[80, 160, 100])
 
     h1("6. Network Requirements")
@@ -830,7 +890,8 @@ def deploy_docx_sections(doc):
     tbl(["Role", "Email", "Password"],
         [["Admin", "admin@fxtracker.com", "Admin@123"],
          ["Trader", "trader@fxtracker.com", "Trader@123"],
-         ["Treasury", "treasury@fxtracker.com", "Treasury@123"]])
+         ["Treasury", "treasury@fxtracker.com", "Treasury@123"],
+         ["System Admin", "sysadmin@fxtracker.com", "SysAdmin@123"]])
 
     h1("6. Network Requirements")
     tbl(["Port", "Service", "Direction"],
