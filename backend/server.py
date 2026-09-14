@@ -1059,7 +1059,7 @@ async def seed_data():
 
     if not await db.users.find_one({"role": "trader"}):
         await db.users.insert_one({
-            "id": str(uuid.uuid4()), "email": "trader@fxtracker.com", "first_name": "John", "last_name": "Trader",
+            "id": str(uuid.uuid4()), "email": "clscforex@pjlhuillier.com", "first_name": "John", "last_name": "Trader",
             "password_hash": pwd_context.hash("Trader@123"), "role": "trader",
             "is_active": True, "created_at": datetime.now(timezone.utc).isoformat()
         })
