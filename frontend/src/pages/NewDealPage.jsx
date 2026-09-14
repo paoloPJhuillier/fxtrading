@@ -33,7 +33,7 @@ export default function NewDealPage() {
   }, []);
 
   const [f, setF] = useState({
-    transaction_type: '', transfer_type: '', client_name: '', counterparty: '',
+    transaction_type: '', transfer_type: '', client_name: '', counterparty: '', to_counterparty: '',
     deal_date: new Date(), value_date: new Date(),
     from_type: 'bank', from_company: '', from_bank: '', from_account_num: '', from_wallet_address: '', from_network: '',
     to_type: 'bank', to_company: '', to_bank: '', to_account_num: '', to_wallet_address: '', to_network: '',
@@ -58,6 +58,7 @@ export default function NewDealPage() {
       const next = { ...p, [k]: v };
       // When transfer type changes, reset conditional fields
       if (k === 'transfer_type') {
+        next.counterparty = ''; next.to_counterparty = '';
         if (v === 'FX Bank Deal') {
           next.to_type = 'bank'; next.to_company = ''; next.to_bank = '';
           next.to_account_num = ''; next.to_wallet_address = '';
@@ -81,9 +82,15 @@ export default function NewDealPage() {
       if (k === 'to_bank') { next.to_account_num = ''; }
       if (k === 'ours_bank') { next.ours_account_num = ''; }
       if (k === 'buying_ours_bank') { next.buying_ours_account_num = ''; }
-      // Auto-sync: counterparty selection also sets from_company and to_company
+      // Auto-sync: counterparty → from_company, to_counterparty → to_company
       if (k === 'counterparty') {
         next.from_company = v;
+        // For non-intercompany, also sync to_company
+        if (next.transfer_type !== 'FX-Intercompany') {
+          next.to_company = v;
+        }
+      }
+      if (k === 'to_counterparty') {
         next.to_company = v;
       }
       return next;
@@ -101,9 +108,14 @@ export default function NewDealPage() {
     const errs = {};
     const base = ['transaction_type', 'transfer_type', 'client_name', 'buy_currency', 'currency_amount', 'rate'];
     if (showCounterparty) base.push('counterparty');
+    if (isFxInterco) base.push('to_counterparty');
     if (!showCounterparty) base.push('from_company');
-    if (showDestination && !showCounterparty) base.push('to_company');
+    if (showDestination && !showCounterparty && !isFxInterco) base.push('to_company');
     base.forEach(k => { if (!f[k]) errs[k] = 'Required'; });
+    // FX-Intercompany: source and destination counterparty must be different
+    if (isFxInterco && f.counterparty && f.to_counterparty && f.counterparty === f.to_counterparty) {
+      errs.to_counterparty = 'Must be different from source counterparty';
+    }
     if (!f.deal_date) errs.deal_date = 'Required';
     if (!f.value_date) errs.value_date = 'Required';
     if (f.from_type === 'bank') {
@@ -289,7 +301,7 @@ export default function NewDealPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               {(isFxInterco) ? (
-                <SearchSelect label="Counterparty" value={f.counterparty || ''} name="counterparty" onChange={up} items={safeRef.counterparties} displayKey="name" tid="to-counterparty" placeholder="Search counterparty..." />
+                <SearchSelect label="Counterparty" value={f.to_counterparty} name="to_counterparty" onChange={up} items={safeRef.counterparties} displayKey="name" tid="to-counterparty" placeholder="Search counterparty..." error={errors.to_counterparty} />
               ) : (
                 <SearchSelect label="Company" value={f.to_company} name="to_company" onChange={up} items={safeRef.companies} displayKey="name" tid="to-company" placeholder="Search company..." error={errors.to_company} />
               )}
@@ -443,7 +455,7 @@ export default function NewDealPage() {
           <Separator />
           <div className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
             <div className="col-span-2 text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Source (From) — {f.from_type === 'bank' ? 'Bank' : 'Crypto'}</div>
-            <CR label="Company" val={f.from_company} />
+            {showCounterparty ? <CR label="Counterparty" val={f.counterparty} /> : <CR label="Company" val={f.from_company} />}
             {f.from_type === 'bank' ? (<><CR label="Bank" val={f.from_bank} /><CR label="Account Number" val={f.from_account_num} mono /></>) : (<CR label="Wallet Address" val={f.from_wallet_address} mono />)}
           </div>
           <div className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
@@ -452,7 +464,7 @@ export default function NewDealPage() {
             ) : (
               <>
                 <div className="col-span-2 text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Destination (To) — {f.to_type === 'bank' ? 'Bank' : 'Crypto'}</div>
-                {isFxInterco ? <CR label="Counterparty" val={f.counterparty} /> : <CR label="Company" val={f.to_company} />}
+                {isFxInterco ? <CR label="Counterparty" val={f.to_counterparty} /> : showCounterparty ? <CR label="Counterparty" val={f.counterparty} /> : <CR label="Company" val={f.to_company} />}
                 {f.to_type === 'bank' ? (<><CR label="Bank" val={f.to_bank} /><CR label="Account Number" val={f.to_account_num} mono /></>) : (<CR label="Wallet Address" val={f.to_wallet_address} mono />)}
               </>
             )}

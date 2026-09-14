@@ -46,6 +46,7 @@ export default function EditDealPage() {
           transfer_type: d.transfer_type || '',
           client_name: d.client_name || '',
           counterparty: d.counterparty || '',
+          to_counterparty: d.to_counterparty || '',
           deal_date: d.deal_date ? new Date(d.deal_date + 'T00:00:00') : new Date(),
           value_date: d.value_date ? new Date(d.value_date + 'T00:00:00') : new Date(),
           from_type: d.from_type || 'bank',
@@ -102,9 +103,14 @@ export default function EditDealPage() {
       if (k === 'from_bank') { next.from_account_num = ''; }
       if (k === 'to_bank') { next.to_account_num = ''; }
       if (k === 'ours_bank') { next.ours_account_num = ''; }
-      // Auto-sync: counterparty selection also sets from_company and to_company
+      // Auto-sync: counterparty → from_company, to_counterparty → to_company
       if (k === 'counterparty') {
         next.from_company = v;
+        if (next.transfer_type !== 'FX-Intercompany') {
+          next.to_company = v;
+        }
+      }
+      if (k === 'to_counterparty') {
         next.to_company = v;
       }
       return next;
@@ -157,7 +163,7 @@ export default function EditDealPage() {
   const buildPayload = () => {
     if (!deal || !f) return null;
     const payload = {};
-    const strFields = ['transaction_type','transfer_type','client_name','counterparty','from_type','from_company','from_bank','from_account_num','from_wallet_address','to_type','to_company','to_bank','to_account_num','to_wallet_address','ours_type','ours_bank','ours_account_num','ours_wallet_address','buy_currency','sell_currency','remarks'];
+    const strFields = ['transaction_type','transfer_type','client_name','counterparty','to_counterparty','from_type','from_company','from_bank','from_account_num','from_wallet_address','to_type','to_company','to_bank','to_account_num','to_wallet_address','ours_type','ours_bank','ours_account_num','ours_wallet_address','buy_currency','sell_currency','remarks'];
     strFields.forEach(k => { if (f[k] !== (deal[k] || '')) payload[k] = f[k]; });
     const dateFields = ['deal_date','value_date'];
     dateFields.forEach(k => {
@@ -313,7 +319,7 @@ export default function EditDealPage() {
           </CardHeader>
           <CardContent className="space-y-4">
             {isFxInterco ? (
-              <SearchSelect label="Counterparty" value={f.counterparty || ''} name="counterparty" onChange={up} items={safeRef.counterparties} displayKey="name" tid="edit-to-counterparty" placeholder="Search counterparty..." />
+              <SearchSelect label="Counterparty" value={f.to_counterparty} name="to_counterparty" onChange={up} items={safeRef.counterparties} displayKey="name" tid="edit-to-counterparty" placeholder="Search counterparty..." error={errors.to_counterparty} />
             ) : showCounterparty ? null : (
               <SearchSelect label="Company" value={f.to_company} name="to_company" onChange={up} items={safeRef.companies} displayKey="name" tid="edit-to-company" placeholder="Search company..." error={errors.to_company} />
             )}

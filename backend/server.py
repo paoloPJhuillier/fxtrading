@@ -72,7 +72,8 @@ class DealCreate(BaseModel):
     deal_date: str
     transfer_type: str
     client_name: str
-    counterparty: Optional[str] = ""  # Used for FX Local / FX-Intercompany
+    counterparty: Optional[str] = ""  # Source counterparty for FX Local / FX-Intercompany
+    to_counterparty: Optional[str] = ""  # Destination counterparty for FX-Intercompany
     from_type: str  # "bank" or "crypto"
     from_company: str
     from_bank: Optional[str] = ""
@@ -140,6 +141,8 @@ class DealEdit(BaseModel):
     deal_date: Optional[str] = None
     transfer_type: Optional[str] = None
     client_name: Optional[str] = None
+    counterparty: Optional[str] = None
+    to_counterparty: Optional[str] = None
     from_type: Optional[str] = None
     from_company: Optional[str] = None
     from_bank: Optional[str] = None
@@ -436,7 +439,7 @@ async def list_deals(
         query.setdefault("deal_date", {})["$lte"] = date_to
     total = await db.deals.count_documents(query)
     skip = (page - 1) * limit
-    list_projection = {"_id": 0, "id": 1, "reference_number": 1, "client_name": 1, "counterparty": 1, "transaction_type": 1, "transfer_type": 1, "buy_currency": 1, "sell_currency": 1, "currency_amount": 1, "amount": 1, "rate": 1, "deal_date": 1, "value_date": 1, "status": 1, "created_at": 1, "created_by_name": 1, "from_type": 1, "from_company": 1, "from_bank": 1, "from_account_num": 1, "from_wallet_address": 1, "from_network": 1, "to_type": 1, "to_company": 1, "to_bank": 1, "to_account_num": 1, "to_wallet_address": 1, "to_network": 1, "ours_type": 1, "ours_bank": 1, "ours_account_num": 1, "ours_wallet_address": 1, "ours_network": 1, "buying_ours_type": 1, "buying_ours_bank": 1, "buying_ours_account_num": 1, "buying_ours_wallet_address": 1, "buying_ours_network": 1, "remarks": 1, "treasury_remarks": 1, "cancellation_reason": 1, "processed_by_name": 1, "processed_at": 1, "settlement_proofs": 1, "history": 1}
+    list_projection = {"_id": 0, "id": 1, "reference_number": 1, "client_name": 1, "counterparty": 1, "to_counterparty": 1, "transaction_type": 1, "transfer_type": 1, "buy_currency": 1, "sell_currency": 1, "currency_amount": 1, "amount": 1, "rate": 1, "deal_date": 1, "value_date": 1, "status": 1, "created_at": 1, "created_by_name": 1, "from_type": 1, "from_company": 1, "from_bank": 1, "from_account_num": 1, "from_wallet_address": 1, "from_network": 1, "to_type": 1, "to_company": 1, "to_bank": 1, "to_account_num": 1, "to_wallet_address": 1, "to_network": 1, "ours_type": 1, "ours_bank": 1, "ours_account_num": 1, "ours_wallet_address": 1, "ours_network": 1, "buying_ours_type": 1, "buying_ours_bank": 1, "buying_ours_account_num": 1, "buying_ours_wallet_address": 1, "buying_ours_network": 1, "remarks": 1, "treasury_remarks": 1, "cancellation_reason": 1, "processed_by_name": 1, "processed_at": 1, "settlement_proofs": 1, "history": 1}
     deals = await db.deals.find(query, list_projection).sort("created_at", -1).skip(skip).limit(limit).to_list(limit)
     # Truncate history to last 3 entries for list performance
     for d in deals:
