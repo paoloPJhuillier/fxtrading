@@ -81,6 +81,11 @@ export default function NewDealPage() {
       if (k === 'to_bank') { next.to_account_num = ''; }
       if (k === 'ours_bank') { next.ours_account_num = ''; }
       if (k === 'buying_ours_bank') { next.buying_ours_account_num = ''; }
+      // Auto-sync: counterparty selection also sets from_company and to_company
+      if (k === 'counterparty') {
+        next.from_company = v;
+        next.to_company = v;
+      }
       return next;
     });
     setErrors(p => p[k] ? { ...p, [k]: null } : p);
